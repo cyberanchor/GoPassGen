@@ -269,47 +269,6 @@ The suite includes **22 end-to-end password vectors** across all seven languages
 
 Coverage is 93.2% of statements (only `main()` and the signal-handling wrapper are below target, plus self-test failure branches that are unreachable in an intact binary).
 
-## Publishing a release
-
-`release.sh` drives the whole process. Every step before `publish` is local and
-repeatable; only `tag` and `publish` touch the remote.
-
-```bash
-./release.sh check      # clean tree, no existing tag, CHANGELOG entry,
-                        # gofmt, vet, full tests, -race, reproducible build
-./release.sh build      # cross-compile, package, generate dist/RELEASE_NOTES.md
-./release.sh tag        # annotated tag + push
-./release.sh publish    # gh release create with every artefact
-./release.sh verify     # download the published assets and check them
-```
-
-Release notes are assembled from the matching `## [VERSION]` section of
-`CHANGELOG.md`, so the changelog is the single source of truth.
-
-Artefacts, all covered by one `SHA256SUMS`:
-
-```
-gopassgen-v1.4.1-linux-amd64.zip      gopassgen-v1.4.1-darwin-arm64.zip
-gopassgen-v1.4.1-linux-arm64.zip      gopassgen-v1.4.1-windows-amd64.zip
-gopassgen-v1.4.1-source.zip           ... 11 archives in total
-SHA256SUMS
-```
-
-Each binary archive contains the executable, its own `gopassgen.sha256`,
-`README.md` and `LICENSE`.
-
-**The archives are reproducible, not only the binaries.** Timestamps are pinned
-to `SOURCE_DATE_EPOCH` and entries are sorted before archiving, so two
-independent `./build.sh dist` runs produce identical `SHA256SUMS`. Rebuilding
-from `gopassgen-vX.Y.Z-source.zip` yields the same binary digest as the one
-published in the release.
-
-Optionally sign the checksum file before publishing; `release.sh publish`
-uploads `dist/SHA256SUMS.asc` when it exists:
-
-```bash
-gpg --armor --detach-sign dist/SHA256SUMS
-```
 
 ## Security notes
 
@@ -328,7 +287,3 @@ These are inherited from the PyPassGen format and preserved for compatibility. T
 - **Shorter passwords are prefixes of longer ones.** The 12-character password is exactly the first 12 characters of the 32-character one from the same phrase, since both consume the same stream. Leaking a short password reveals the start of a long one.
 - **One phrase, one password.** There is no per-site separation: the domain-separation input exists in the format but is always empty. A separate mnemonic per site is the only isolation available.
 - **The 1,000,000 PBKDF2 iterations add little.** They stretch a 512-bit seed that is already unguessable; stretching defends low-entropy inputs, and this input is not one. Real strength equals the mnemonic's entropy: 128 bits for 12 words, 256 for 24.
-
-## License
-
-See `LICENSE`.
