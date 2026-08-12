@@ -1,0 +1,537 @@
+{
+ "password_vectors": [
+  {
+   "name": "english_abandon_len1",
+   "language": "english",
+   "mnemonic": "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
+   "length": 1,
+   "password": ","
+  },
+  {
+   "name": "english_abandon_len12",
+   "language": "english",
+   "mnemonic": "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
+   "length": 12,
+   "password": ",6UiYsb-haPx"
+  },
+  {
+   "name": "english_abandon_len16",
+   "language": "english",
+   "mnemonic": "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
+   "length": 16,
+   "password": ",6UiYsb-haPxbRcv"
+  },
+  {
+   "name": "english_abandon_len32",
+   "language": "english",
+   "mnemonic": "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
+   "length": 32,
+   "password": ",6UiYsb-haPxbRcv=K5%).Mf=*u2Rzih"
+  },
+  {
+   "name": "english_abandon_len100",
+   "language": "english",
+   "mnemonic": "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
+   "length": 100,
+   "password": ",6UiYsb-haPxbRcv=K5%).Mf=*u2RzihN5g>!t}wA&0P_r#eni;u<*!Fv&WLt1ILMIWXyM{Sr50JI3z,7jf<S>t3ytW.)_p>jM=?"
+  },
+  {
+   "name": "english_abandon_len256",
+   "language": "english",
+   "mnemonic": "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
+   "length": 256,
+   "password": ",6UiYsb-haPxbRcv=K5%).Mf=*u2RzihN5g>!t}wA&0P_r#eni;u<*!Fv&WLt1ILMIWXyM{Sr50JI3z,7jf<S>t3ytW.)_p>jM=?nG:16cPEVuF3h&pW%tC#]<n3e][ON<11XQfMy1jP?Gg67PZG,qNU3c9:W4dB(@*_htr:s<8szBglc@7[;%%$-K+y=hBBNezTJrU>}]g4=){D;II&TOPI:lv}DUAfNhpQWzp[uKqtjSvQhiZ)KS3?oQn@tX6g"
+  },
+  {
+   "name": "english_24_len12",
+   "language": "english",
+   "mnemonic": "abandon amount liar amount expire adjust cage candy arch gather drum bullet absurd math era live bid rhythm alien crouch range attend journey unaware",
+   "length": 12,
+   "password": "awv]!ns[b815"
+  },
+  {
+   "name": "english_24_len32",
+   "language": "english",
+   "mnemonic": "abandon amount liar amount expire adjust cage candy arch gather drum bullet absurd math era live bid rhythm alien crouch range attend journey unaware",
+   "length": 32,
+   "password": "awv]!ns[b815avxZbkFJ%tt[75{w<_>k"
+  },
+  {
+   "name": "english_12_len16",
+   "language": "english",
+   "mnemonic": "abandon amount liar amount expire adjust cage candy arch gather drum buyer",
+   "length": 16,
+   "password": "yHc6VuB)@>AlgnJ="
+  },
+  {
+   "name": "english_24_len24",
+   "language": "english",
+   "mnemonic": "abandon amount liar amount expire adjust cage candy arch gather drum bullet absurd math era live bid rhythm alien crouch range attend journey unaware",
+   "length": 24,
+   "password": "awv]!ns[b815avxZbkFJ%tt["
+  },
+  {
+   "name": "french_12_len16",
+   "language": "french",
+   "mnemonic": "abaisser agréable inductif agréable éligible achat bolide boucle amateur exister dérober bloquer",
+   "length": 16,
+   "password": "a~,#>Hhs!KB31#ae"
+  },
+  {
+   "name": "french_24_len24",
+   "language": "french",
+   "mnemonic": "abaisser agréable inductif agréable éligible achat bolide boucle amateur exister dérober bison abrasif justice écharpe inonder avancer piano adulte cobra papaye anonyme hangar tomate",
+   "length": 24,
+   "password": ">o9B8GgKbDcakhviH.J.~aCH"
+  },
+  {
+   "name": "spanish_12_len16",
+   "language": "spanish",
+   "mnemonic": "ábaco álbum líquido álbum espuma acudir bolero bosque amante gaita dictar boca",
+   "length": 16,
+   "password": "g_M~lXq<^>ViToH."
+  },
+  {
+   "name": "spanish_24_len24",
+   "language": "spanish",
+   "mnemonic": "ábaco álbum líquido álbum espuma acudir bolero bosque amante gaita dictar bestia abrir marco encargo lluvia atar porción agudo clínica pesca anuncio justo tóxico",
+   "length": 24,
+   "password": "PfQ_)oAT,uW8ZtHV]OG$UH1G"
+  },
+  {
+   "name": "italian_12_len16",
+   "language": "italian",
+   "mnemonic": "abaco alogeno mitigare alogeno fenomeno affetto bravura bronzina ampio gonfio elaborato bottino",
+   "length": 16,
+   "password": "&GsX4b>fC#twYJS."
+  },
+  {
+   "name": "italian_24_len24",
+   "language": "italian",
+   "mnemonic": "abaco alogeno mitigare alogeno fenomeno affetto bravura bronzina ampio gonfio elaborato bisonte accadere nessuno europa monile autunno risibile alce criceto renna apparire mana trincea",
+   "length": 24,
+   "password": ";aks<&I5)~<!QxV6t@>$V=[^"
+  },
+  {
+   "name": "japanese_12_len16",
+   "language": "japanese",
+   "mnemonic": "あいこくしん　いくぶん　そなた　いくぶん　こぜん　あぶら　おおう　おきる　いたみ　さんすう　けたば　おうたい",
+   "length": 16,
+   "password": "HJRW>>j0Hs6AfF=Z"
+  },
+  {
+   "name": "japanese_24_len24",
+   "language": "japanese",
+   "mnemonic": "あいこくしん　いくぶん　そなた　いくぶん　こぜん　あぶら　おおう　おきる　いたみ　さんすう　けたば　えんちょう　あこがれる　たきび　ごうせい　そんざい　うつくしい　ねったいぎょ　あんこ　きつね　にっこう　いびき　ぜんあく　めずらしい",
+   "length": 24,
+   "password": "At3NTPFCejE1xB[?hq}vsq}3"
+  },
+  {
+   "name": "korean_12_len16",
+   "language": "korean",
+   "mnemonic": "가격 걱정 심부름 걱정 별도 갈색 기법 기운 경력 산길 미술 기념",
+   "length": 16,
+   "password": "oYCSD$lI7_>ySb~S"
+  },
+  {
+   "name": "korean_24_len24",
+   "language": "korean",
+   "mnemonic": "가격 걱정 심부름 걱정 별도 갈색 기법 기운 경력 산길 미술 금고 가상 어른 배달 아울러 교육 전공 같이 독립 작품 고민 시댁 하드웨어",
+   "length": 24,
+   "password": "1d:Mkxv3K:HV1IlKVu1U2JJs"
+  },
+  {
+   "name": "chinese_simplified_12_len16",
+   "language": "chinese_simplified",
+   "mnemonic": "的 三 欧 三 考 于 据 保 量 损 破 战",
+   "length": 16,
+   "password": "uL$YftY:YiPd}88w"
+  },
+  {
+   "name": "chinese_simplified_24_len24",
+   "language": "chinese_simplified",
+   "mnemonic": "的 三 欧 三 考 于 据 保 量 损 破 九 人 雄 修 麦 最 仓 面 约 袋 天 绍 汁",
+   "length": 24,
+   "password": "2v82vVRh5J.ujn:1(^-%QPG["
+  }
+ ],
+ "mnemonic_vectors": [
+  {
+   "language": "english",
+   "entropy": "00000000000000000000000000000000",
+   "mnemonic": "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"
+  },
+  {
+   "language": "english",
+   "entropy": "7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f",
+   "mnemonic": "legal winner thank year wave sausage worth useful legal winner thank yellow"
+  },
+  {
+   "language": "english",
+   "entropy": "ffffffffffffffffffffffffffffffff",
+   "mnemonic": "zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo wrong"
+  },
+  {
+   "language": "english",
+   "entropy": "0000000000000000000000000000000000000000000000000000000000000000",
+   "mnemonic": "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon art"
+  },
+  {
+   "language": "english",
+   "entropy": "f585c11aec520db57dd353c69554b21a89b20fb0650966fa0a9d6f74fd989d8f",
+   "mnemonic": "void come effort suffer camp survey warrior heavy shoot primary clutch crush open amazing screen patrol group space point ten exist slush involve unfold"
+  },
+  {
+   "language": "french",
+   "entropy": "00000000000000000000000000000000",
+   "mnemonic": "abaisser abaisser abaisser abaisser abaisser abaisser abaisser abaisser abaisser abaisser abaisser abeille"
+  },
+  {
+   "language": "french",
+   "entropy": "7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f",
+   "mnemonic": "implorer visage sonnette voyage véloce pourpre volaille tribunal implorer visage sonnette voyelle"
+  },
+  {
+   "language": "french",
+   "entropy": "ffffffffffffffffffffffffffffffff",
+   "mnemonic": "zoologie zoologie zoologie zoologie zoologie zoologie zoologie zoologie zoologie zoologie zoologie voter"
+  },
+  {
+   "language": "french",
+   "entropy": "0000000000000000000000000000000000000000000000000000000000000000",
+   "mnemonic": "abaisser abaisser abaisser abaisser abaisser abaisser abaisser abaisser abaisser abaisser abaisser abaisser abaisser abaisser abaisser abaisser abaisser abaisser abaisser abaisser abaisser abaisser abaisser anaphore"
+  },
+  {
+   "language": "french",
+   "entropy": "f585c11aec520db57dd353c69554b21a89b20fb0650966fa0a9d6f74fd989d8f",
+   "mnemonic": "vaillant chance dimanche sécable bonus séparer vecteur forcer raideur officier censurer cohésion meuble agiter prison mutation filière rincer novice solitude élargir renfort gronder tornade"
+  },
+  {
+   "language": "spanish",
+   "entropy": "00000000000000000000000000000000",
+   "mnemonic": "ábaco ábaco ábaco ábaco ábaco ábaco ábaco ábaco ábaco ábaco ábaco abierto"
+  },
+  {
+   "language": "spanish",
+   "entropy": "7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f",
+   "mnemonic": "ligero vista talar yogur venta queso yacer trozo ligero vista talar zafiro"
+  },
+  {
+   "language": "spanish",
+   "entropy": "ffffffffffffffffffffffffffffffff",
+   "mnemonic": "zurdo zurdo zurdo zurdo zurdo zurdo zurdo zurdo zurdo zurdo zurdo yodo"
+  },
+  {
+   "language": "spanish",
+   "entropy": "0000000000000000000000000000000000000000000000000000000000000000",
+   "mnemonic": "ábaco ábaco ábaco ábaco ábaco ábaco ábaco ábaco ábaco ábaco ábaco ábaco ábaco ábaco ábaco ábaco ábaco ábaco ábaco ábaco ábaco ábaco ábaco ancla"
+  },
+  {
+   "language": "spanish",
+   "entropy": "f585c11aec520db57dd353c69554b21a89b20fb0650966fa0a9d6f74fd989d8f",
+   "mnemonic": "vampiro célula dos simio bono sondeo vencer haz remar papel castor codo nivel alarma rapaz ofensa gripe sagaz otro tabaco esfuerzo rojizo jinete traje"
+  },
+  {
+   "language": "italian",
+   "entropy": "00000000000000000000000000000000",
+   "mnemonic": "abaco abaco abaco abaco abaco abaco abaco abaco abaco abaco abaco abete"
+  },
+  {
+   "language": "italian",
+   "entropy": "7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f",
+   "mnemonic": "mimosa vita sussurro zinco vero saltare zattera ulisse mimosa vita sussurro zircone"
+  },
+  {
+   "language": "italian",
+   "entropy": "ffffffffffffffffffffffffffffffff",
+   "mnemonic": "zuppa zuppa zuppa zuppa zuppa zuppa zuppa zuppa zuppa zuppa zuppa zerbino"
+  },
+  {
+   "language": "italian",
+   "entropy": "0000000000000000000000000000000000000000000000000000000000000000",
+   "mnemonic": "abaco abaco abaco abaco abaco abaco abaco abaco abaco abaco abaco abaco abaco abaco abaco abaco abaco abaco abaco abaco abaco abaco abaco angelo"
+  },
+  {
+   "language": "italian",
+   "entropy": "f585c11aec520db57dd353c69554b21a89b20fb0650966fa0a9d6f74fd989d8f",
+   "mnemonic": "varcato codice enzima spessore brillante squillo vento insieme scoprire prugna circa cruciale peccato allusivo savio pilota inarcare simulato precluso sugo fegato sfamato lusso trono"
+  },
+  {
+   "language": "japanese",
+   "entropy": "00000000000000000000000000000000",
+   "mnemonic": "あいこくしん　あいこくしん　あいこくしん　あいこくしん　あいこくしん　あいこくしん　あいこくしん　あいこくしん　あいこくしん　あいこくしん　あいこくしん　あおぞら"
+  },
+  {
+   "language": "japanese",
+   "entropy": "7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f",
+   "mnemonic": "そつう　れきだい　ほんやく　わかす　りくつ　ばいか　ろせん　やちん　そつう　れきだい　ほんやく　わかめ"
+  },
+  {
+   "language": "japanese",
+   "entropy": "ffffffffffffffffffffffffffffffff",
+   "mnemonic": "われる　われる　われる　われる　われる　われる　われる　われる　われる　われる　われる　ろんぶん"
+  },
+  {
+   "language": "japanese",
+   "entropy": "0000000000000000000000000000000000000000000000000000000000000000",
+   "mnemonic": "あいこくしん　あいこくしん　あいこくしん　あいこくしん　あいこくしん　あいこくしん　あいこくしん　あいこくしん　あいこくしん　あいこくしん　あいこくしん　あいこくしん　あいこくしん　あいこくしん　あいこくしん　あいこくしん　あいこくしん　あいこくしん　あいこくしん　あいこくしん　あいこくしん　あいこくしん　あいこくしん　いってい"
+  },
+  {
+   "language": "japanese",
+   "entropy": "f585c11aec520db57dd353c69554b21a89b20fb0650966fa0a9d6f74fd989d8f",
+   "mnemonic": "よゆう　かんけい　けぶかい　へいこう　おかず　べんごし　りえき　じゆう　はんい　ともる　かほご　きぬごし　つみき　いきる　はかる　てふだ　しほう　ひろう　とくてん　ほったん　こさめ　ひつじゅひん　せつぞく　めんどう"
+  },
+  {
+   "language": "korean",
+   "entropy": "00000000000000000000000000000000",
+   "mnemonic": "가격 가격 가격 가격 가격 가격 가격 가격 가격 가격 가격 가능"
+  },
+  {
+   "language": "korean",
+   "entropy": "7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f",
+   "mnemonic": "실장 활동 큰절 흔적 형제 제대로 훈련 한글 실장 활동 큰절 흔히"
+  },
+  {
+   "language": "korean",
+   "entropy": "ffffffffffffffffffffffffffffffff",
+   "mnemonic": "힘껏 힘껏 힘껏 힘껏 힘껏 힘껏 힘껏 힘껏 힘껏 힘껏 힘껏 흑백"
+  },
+  {
+   "language": "korean",
+   "entropy": "0000000000000000000000000000000000000000000000000000000000000000",
+   "mnemonic": "가격 가격 가격 가격 가격 가격 가격 가격 가격 가격 가격 가격 가격 가격 가격 가격 가격 가격 가격 가격 가격 가격 가격 계단"
+  },
+  {
+   "language": "korean",
+   "entropy": "f585c11aec520db57dd353c69554b21a89b20fb0650966fa0a9d6f74fd989d8f",
+   "mnemonic": "향상 담배 박수 추측 기술 충분히 협력 성적 줄무늬 인체 단위 딸아이 왼손 거짓 조깅 유명 석사 참석 이야기 크림 변동 진급 스케이트 하지만"
+  },
+  {
+   "language": "chinese_simplified",
+   "entropy": "00000000000000000000000000000000",
+   "mnemonic": "的 的 的 的 的 的 的 的 的 的 的 在"
+  },
+  {
+   "language": "chinese_simplified",
+   "entropy": "7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f",
+   "mnemonic": "枪 疫 霉 尝 俩 闹 饿 贤 枪 疫 霉 卿"
+  },
+  {
+   "language": "chinese_simplified",
+   "entropy": "ffffffffffffffffffffffffffffffff",
+   "mnemonic": "歇 歇 歇 歇 歇 歇 歇 歇 歇 歇 歇 逻"
+  },
+  {
+   "language": "chinese_simplified",
+   "entropy": "0000000000000000000000000000000000000000000000000000000000000000",
+   "mnemonic": "的 的 的 的 的 的 的 的 的 的 的 的 的 的 的 的 的 的 的 的 的 的 的 性"
+  },
+  {
+   "language": "chinese_simplified",
+   "entropy": "f585c11aec520db57dd353c69554b21a89b20fb0650966fa0a9d6f74fd989d8f",
+   "mnemonic": "柄 需 固 姆 色 斥 霍 握 宾 琴 况 团 抵 经 摸 郭 沙 鸣 拖 妙 阳 辈 掉 迁"
+  }
+ ],
+ "seed_vectors": [
+  {
+   "name": "english_abandon",
+   "language": "english",
+   "mnemonic": "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
+   "seed": "5eb00bbddcf069084889a8ab9155568165f5c453ccb85e70811aaed6f6da5fc19a5ac40b389cd370d086206dec8aa6c43daea6690f20ad3d8d48b2d2ce9e38e4"
+  },
+  {
+   "name": "english_24",
+   "language": "english",
+   "mnemonic": "abandon amount liar amount expire adjust cage candy arch gather drum bullet absurd math era live bid rhythm alien crouch range attend journey unaware",
+   "seed": "0a6d060f6242aece4b074e48e7d8166f792a9b2bb7b295fa5ac289eda7647290c3d80e7436d6e9e34e72769c06f6582192d0b57ae4a97e9e24c8972a770a57d9"
+  },
+  {
+   "name": "english_12",
+   "language": "english",
+   "mnemonic": "abandon amount liar amount expire adjust cage candy arch gather drum buyer",
+   "seed": "3779b041fab425e9c0fd55846b2a03e9a388fb12784067bd8ebdb464c2574a05bcc7a8eb54d7b2a2c8420ff60f630722ea5132d28605dbc996c8ca7d7a8311c0"
+  },
+  {
+   "name": "french_12",
+   "language": "french",
+   "mnemonic": "abaisser agréable inductif agréable éligible achat bolide boucle amateur exister dérober bloquer",
+   "seed": "b70232fad2698ee7236b5f789e1566157f41e9b0a22b4dfa0c3325172a6fd8513e0d552a12c335737275847d5b25a24bfaad97bdb4d98541901d3bd2a9cbfcf1"
+  },
+  {
+   "name": "french_24",
+   "language": "french",
+   "mnemonic": "abaisser agréable inductif agréable éligible achat bolide boucle amateur exister dérober bison abrasif justice écharpe inonder avancer piano adulte cobra papaye anonyme hangar tomate",
+   "seed": "e05c1acfc0b4abfc227b0aebf58d83b161c7bfe19f1fdcbc4df9299466bec939d85e55c16153aa06c253b08c59d142e4f8d9d5b1a000521a66c92711a72b6cb1"
+  },
+  {
+   "name": "spanish_12",
+   "language": "spanish",
+   "mnemonic": "ábaco álbum líquido álbum espuma acudir bolero bosque amante gaita dictar boca",
+   "seed": "21d369cf994a9b2d99c938c979d9ca95ceeb7ac55589622bf57e2f53e7edf7688eb32a140ac9206dbf219376a8ffc7ecf4d642a88834a1dfb633d75a34180b60"
+  },
+  {
+   "name": "spanish_24",
+   "language": "spanish",
+   "mnemonic": "ábaco álbum líquido álbum espuma acudir bolero bosque amante gaita dictar bestia abrir marco encargo lluvia atar porción agudo clínica pesca anuncio justo tóxico",
+   "seed": "9440517994ad3043ddc052acf4027dd9fd52bab732346bdef7141b1b75ffa80f286fe035cd9229ef1d45ecd63e44ecec6c24f4942348aa2297e335d484bc4e55"
+  },
+  {
+   "name": "italian_12",
+   "language": "italian",
+   "mnemonic": "abaco alogeno mitigare alogeno fenomeno affetto bravura bronzina ampio gonfio elaborato bottino",
+   "seed": "e26a889ebae217f1115abd8d324d850927af0af43b42ed4c333b8962e1088f8ee6a829628cdbb1c70a4fd691aa6adeb40e631fc8cb3aa44746c361ba34e8be21"
+  },
+  {
+   "name": "italian_24",
+   "language": "italian",
+   "mnemonic": "abaco alogeno mitigare alogeno fenomeno affetto bravura bronzina ampio gonfio elaborato bisonte accadere nessuno europa monile autunno risibile alce criceto renna apparire mana trincea",
+   "seed": "4ef493054b630309603a566f5ea89c9b3d5e4401ba93cb32c615bb26b89b839fe44c14182d7444fe434f0ef34b86bb763e8ab095ac47e8ed5da5d6a287fb2f7a"
+  },
+  {
+   "name": "japanese_12",
+   "language": "japanese",
+   "mnemonic": "あいこくしん　いくぶん　そなた　いくぶん　こぜん　あぶら　おおう　おきる　いたみ　さんすう　けたば　おうたい",
+   "seed": "8c62436b42e641181b155fcdb62af9dd960156b9ab6fbe58880174ce48a1d97fde3d43b622c2959fd437fd1ee1dcd96ccc4ca24dbd1317d770ac2bbfede5521f"
+  },
+  {
+   "name": "japanese_24",
+   "language": "japanese",
+   "mnemonic": "あいこくしん　いくぶん　そなた　いくぶん　こぜん　あぶら　おおう　おきる　いたみ　さんすう　けたば　えんちょう　あこがれる　たきび　ごうせい　そんざい　うつくしい　ねったいぎょ　あんこ　きつね　にっこう　いびき　ぜんあく　めずらしい",
+   "seed": "ab14296061cc3747a6ed46294fdc494de92b3c2a7ed4e88e78935a0b194de78d95872a51a97ef53c86f5d04115e3d3c0455ddf20c302c77d8765c0c4b8c76588"
+  },
+  {
+   "name": "korean_12",
+   "language": "korean",
+   "mnemonic": "가격 걱정 심부름 걱정 별도 갈색 기법 기운 경력 산길 미술 기념",
+   "seed": "c84d23b603720bc67db1b1f5f1cbfc82b760736ad8069bf283c8d5d2a5b1e2075e73208fbe8763500b572839ff3c7827917a7d8eec19b2732152f84b0ace5b70"
+  },
+  {
+   "name": "korean_24",
+   "language": "korean",
+   "mnemonic": "가격 걱정 심부름 걱정 별도 갈색 기법 기운 경력 산길 미술 금고 가상 어른 배달 아울러 교육 전공 같이 독립 작품 고민 시댁 하드웨어",
+   "seed": "df4b9305b4657550efe3543814277c86827478feb0367496eb839b9fe5893a6597a4a012d44680ba591b00cc8bfcf7c73ad590d71560bdedaa4737b3f6368e07"
+  },
+  {
+   "name": "chinese_simplified_12",
+   "language": "chinese_simplified",
+   "mnemonic": "的 三 欧 三 考 于 据 保 量 损 破 战",
+   "seed": "9859899437d054276ba8301d0a27b0c0c67c6e2863d68ed8d52e44c5ed9e0cc4132a5f6ba37c4ee8a2f2bbc498293a642c9ff497fff1f5f546cae2c165e0f089"
+  },
+  {
+   "name": "chinese_simplified_24",
+   "language": "chinese_simplified",
+   "mnemonic": "的 三 欧 三 考 于 据 保 量 损 破 九 人 雄 修 麦 最 仓 面 约 袋 天 绍 汁",
+   "seed": "ae971cf320db4554fcba6d2a9d14a560409084e8209c796c58e64b3052f1e8b34fb07df0fbed4a126aa67c90c47bf4cd5a62c8ad74b627b6419e7d8e964a80be"
+  }
+ ],
+ "check_vectors": [
+  {
+   "language": "english",
+   "mnemonic": "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
+   "valid": true,
+   "desc": "valid 12-word"
+  },
+  {
+   "language": "english",
+   "mnemonic": "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon",
+   "valid": false,
+   "desc": "bad checksum"
+  },
+  {
+   "language": "english",
+   "mnemonic": "abandon  abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
+   "valid": false,
+   "desc": "double space"
+  },
+  {
+   "language": "english",
+   "mnemonic": " abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
+   "valid": false,
+   "desc": "leading space"
+  },
+  {
+   "language": "english",
+   "mnemonic": "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about ",
+   "valid": false,
+   "desc": "trailing space"
+  },
+  {
+   "language": "english",
+   "mnemonic": "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about\n",
+   "valid": false,
+   "desc": "trailing newline"
+  },
+  {
+   "language": "english",
+   "mnemonic": "ABANDON ABANDON ABANDON ABANDON ABANDON ABANDON ABANDON ABANDON ABANDON ABANDON ABANDON ABOUT",
+   "valid": false,
+   "desc": "uppercase"
+  },
+  {
+   "language": "english",
+   "mnemonic": "abandon abandon abandon",
+   "valid": false,
+   "desc": "3 words"
+  },
+  {
+   "language": "english",
+   "mnemonic": "",
+   "valid": false,
+   "desc": "empty"
+  },
+  {
+   "language": "english",
+   "mnemonic": "zzzz zzzz zzzz zzzz zzzz zzzz zzzz zzzz zzzz zzzz zzzz about",
+   "valid": false,
+   "desc": "unknown words"
+  },
+  {
+   "language": "english",
+   "mnemonic": "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon zzzz",
+   "valid": false,
+   "desc": "one unknown word"
+  },
+  {
+   "language": "english",
+   "mnemonic": "abandon　abandon　abandon　abandon　abandon　abandon　abandon　abandon　abandon　abandon　abandon　about",
+   "valid": true,
+   "desc": "ideographic spaces in english"
+  },
+  {
+   "language": "english",
+   "mnemonic": "abandon\tabandon\tabandon\tabandon\tabandon\tabandon\tabandon\tabandon\tabandon\tabandon\tabandon\tabout",
+   "valid": false,
+   "desc": "tabs"
+  },
+  {
+   "language": "french",
+   "mnemonic": "cligner gouffre monotone mutuel sortir rythme décider mignon fébrile refuge magique incolore",
+   "valid": true,
+   "desc": "french precomposed"
+  },
+  {
+   "language": "french",
+   "mnemonic": "cligner gouffre monotone mutuel sortir rythme décider mignon fébrile refuge magique incolore",
+   "valid": true,
+   "desc": "french decomposed"
+  },
+  {
+   "language": "japanese",
+   "mnemonic": "なにごと　せいじ　いほう　うせつ　せきらんうん　あらいぐま　りよう　だんあつ　ちあん　いれる　ぬんちゃく　そっけつ",
+   "valid": true,
+   "desc": "japanese u3000"
+  },
+  {
+   "language": "japanese",
+   "mnemonic": "なにごと せいじ いほう うせつ せきらんうん あらいぐま りよう だんあつ ちあん いれる ぬんちゃく そっけつ",
+   "valid": true,
+   "desc": "japanese plain space"
+  },
+  {
+   "language": "english",
+   "mnemonic": "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon ABOUT",
+   "valid": false,
+   "desc": "one uppercase word"
+  }
+ ]
+}
