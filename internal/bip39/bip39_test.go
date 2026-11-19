@@ -8,7 +8,7 @@ import (
 	"testing"
 	"unicode/utf8"
 
-	"gopassgen/internal/derive"
+	"github.com/cyberanchor/GoPassGen/internal/derive"
 )
 
 const validEN = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"

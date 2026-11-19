@@ -540,11 +540,12 @@ func TestColorEnabled(t *testing.T) {
 		t.Error("a regular file must not get colour")
 	}
 
-	t.Setenv("NO_COLOR", "1")
+	// A character device is not a terminal.
+	t.Setenv("NO_COLOR", "")
 	if dev, err := os.OpenFile(os.DevNull, os.O_WRONLY, 0); err == nil {
 		defer dev.Close()
 		if ColorEnabled(dev, false) {
-			t.Error("NO_COLOR must disable colour")
+			t.Error("the null device must not get colour")
 		}
 	}
 

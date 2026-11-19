@@ -12,11 +12,12 @@
 //     bytes >= 176 are discarded (rejection sampling, no modulo bias).
 //
 // Secret material is handled as []byte rather than string so that callers can
-// wipe it. See Wipe.
+// wipe it. See Wipe. PBKDF2 and HMAC live in kdf.go, written so that their
+// key-dependent state can be erased and a long derivation can be cancelled.
 package derive
 
 import (
-	"crypto/hmac"
+	"context"
 	"crypto/sha512"
 	"encoding/binary"
 	"errors"
@@ -26,7 +27,6 @@ import (
 	"runtime"
 	"time"
 
-	"golang.org/x/crypto/pbkdf2"
 	"golang.org/x/text/unicode/norm"
 )
 
@@ -136,35 +136,53 @@ func NormalizeString(s string) string {
 // Seed performs stage 1+2: BIP-39 mnemonic to 64-byte seed.
 // The returned slice is secret; wipe it when done.
 func Seed(mnemonic, passphrase string) []byte {
-	m := []byte(NormalizeString(mnemonic))
-	p := []byte(NormalizeString(passphrase))
-
-	salt := make([]byte, 0, len(seedSaltPrefix)+len(p))
-	salt = append(salt, seedSaltPrefix...)
-	salt = append(salt, p...)
-
-	seed := pbkdf2.Key(m, salt, SeedIterations, KeyLen, sha512.New)
-	Wipe(m)
-	Wipe(p)
-	Wipe(salt)
+	seed, err := SeedContext(context.Background(), mnemonic, passphrase)
+	if err != nil {
+		panic("derive: a background context was cancelled: " + err.Error())
+	}
 	return seed
+}
+
+// SeedContext is Seed with cancellation.
+func SeedContext(ctx context.Context, mnemonic, passphrase string) ([]byte, error) {
+	m := TrackSecret([]byte(NormalizeString(mnemonic)))
+	p := TrackSecret([]byte(NormalizeString(passphrase)))
+	defer Wipe(m)
+	defer Wipe(p)
+
+	salt := TrackSecret(make([]byte, len(seedSaltPrefix)+len(p)))
+	defer Wipe(salt)
+	copy(salt, seedSaltPrefix)
+	copy(salt[len(seedSaltPrefix):], p)
+
+	return pbkdf2SHA512(ctx, m, salt, SeedIterations)
 }
 
 // Key performs stage 3: seed to 64-byte derivation key.
 // This is the expensive step (1,000,000 iterations).
 // The returned slice is secret; wipe it when done.
 func Key(seed []byte) []byte {
-	return pbkdf2.Key(seed, fixedSalt, KeyIterations, KeyLen, sha512.New)
+	key, err := KeyContext(context.Background(), seed)
+	if err != nil {
+		panic("derive: a background context was cancelled: " + err.Error())
+	}
+	return key
+}
+
+// KeyContext is Key with cancellation: it returns ctx.Err() shortly after ctx
+// is cancelled instead of finishing all iterations.
+func KeyContext(ctx context.Context, seed []byte) ([]byte, error) {
+	return pbkdf2SHA512(ctx, seed, fixedSalt, KeyIterations)
 }
 
 // Password performs stages 4+5: key to password bytes.
 //
-// context is the optional domain-separation input. PyPassGen always passes an
-// empty context, so callers that need bit-compatibility must pass nil.
+// domain is the optional domain-separation input. PyPassGen always passes an
+// empty one, so callers that need bit-compatibility must pass nil.
 //
 // The result is returned as []byte so the caller can wipe it after use;
 // converting it to string creates an immutable copy that cannot be erased.
-func Password(key []byte, length int, context []byte) ([]byte, Stats, error) {
+func Password(key []byte, length int, domain []byte) ([]byte, Stats, error) {
 	var st Stats
 
 	if len(key) != KeyLen {
@@ -178,21 +196,22 @@ func Password(key []byte, length int, context []byte) ([]byte, Stats, error) {
 	}
 
 	out := make([]byte, 0, length)
-	msg := make([]byte, 0, len(hmacDomain)+len(context)+4)
+	msg := make([]byte, 0, len(hmacDomain)+len(domain)+4)
 	ctr := make([]byte, 4)
-	mac := hmac.New(sha512.New, key)
+	block := TrackSecret(make([]byte, sha512.Size))
+	defer Wipe(block)
+	mac := newHMAC(key)
+	defer mac.wipe()
 
 	for counter := uint32(0); len(out) < length; counter++ {
 		binary.BigEndian.PutUint32(ctr, counter)
 
 		msg = msg[:0]
 		msg = append(msg, hmacDomain...)
-		msg = append(msg, context...)
+		msg = append(msg, domain...)
 		msg = append(msg, ctr...)
 
-		mac.Reset()
-		mac.Write(msg)
-		block := mac.Sum(nil)
+		mac.sum(block, msg, nil)
 		st.StreamBlocks++
 
 		for _, b := range block {
@@ -206,17 +225,21 @@ func Password(key []byte, length int, context []byte) ([]byte, Stats, error) {
 				break
 			}
 		}
-		Wipe(block)
 	}
 
 	Wipe(msg)
 	return out, st, nil
 }
 
-// FromMnemonic runs the whole pipeline and wipes every intermediate secret.
+// FromMnemonic runs the whole pipeline and wipes every intermediate byte slice.
 // It performs no BIP-39 validation — that belongs to package bip39 and is
 // enforced by package passgen.
-func FromMnemonic(mnemonic, passphrase string, length int, context []byte) ([]byte, Stats, error) {
+func FromMnemonic(mnemonic, passphrase string, length int, domain []byte) ([]byte, Stats, error) {
+	return FromMnemonicContext(context.Background(), mnemonic, passphrase, length, domain)
+}
+
+// FromMnemonicContext is FromMnemonic with cancellation.
+func FromMnemonicContext(ctx context.Context, mnemonic, passphrase string, length int, domain []byte) ([]byte, Stats, error) {
 	if length <= 0 {
 		return nil, Stats{}, fmt.Errorf("%w: %d", ErrLengthNotPositive, length)
 	}
@@ -225,16 +248,20 @@ func FromMnemonic(mnemonic, passphrase string, length int, context []byte) ([]by
 	}
 
 	t0 := time.Now()
-	seed := Seed(mnemonic, passphrase)
+	seed, err := SeedContext(ctx, mnemonic, passphrase)
+	if err != nil {
+		return nil, Stats{}, err
+	}
+	defer Wipe(TrackSecret(seed))
 	t1 := time.Now()
-	key := Key(seed)
+	key, err := KeyContext(ctx, seed)
+	if err != nil {
+		return nil, Stats{}, err
+	}
+	defer Wipe(TrackSecret(key))
 	t2 := time.Now()
 
-	pw, st, err := Password(key, length, context)
-
-	Wipe(seed)
-	Wipe(key)
-
+	pw, st, err := Password(key, length, domain)
 	if err != nil {
 		return nil, Stats{}, err
 	}
@@ -264,8 +291,8 @@ func EffectiveEntropyBits(length, mnemonicBits int) float64 {
 
 // Wipe overwrites b with zeros.
 //
-// Best effort, exactly as in the Python original: Go's garbage collector may
-// have moved or copied the backing array, and this cannot erase such copies.
+// Best effort, exactly as in the Python original: Go's runtime may have copied
+// the data beforehand, and a mnemonic held in a string cannot be erased at all.
 // It does reliably clear the slice the caller holds.
 func Wipe(b []byte) {
 	for i := range b {

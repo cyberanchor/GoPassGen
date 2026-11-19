@@ -6,8 +6,8 @@ import (
 	"os"
 	"testing"
 
-	"gopassgen/internal/bip39"
-	"gopassgen/internal/derive"
+	"github.com/cyberanchor/GoPassGen/internal/bip39"
+	"github.com/cyberanchor/GoPassGen/internal/derive"
 )
 
 // vectorFile is produced by the reference implementation (PyPassGen 1.3.5 with

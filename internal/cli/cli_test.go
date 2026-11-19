@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"io"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -12,9 +11,9 @@ import (
 	"testing"
 	"time"
 
-	"gopassgen/internal/bip39"
-	"gopassgen/internal/buildinfo"
-	"gopassgen/internal/derive"
+	"github.com/cyberanchor/GoPassGen/internal/bip39"
+	"github.com/cyberanchor/GoPassGen/internal/buildinfo"
+	"github.com/cyberanchor/GoPassGen/internal/derive"
 )
 
 const (
@@ -412,13 +411,24 @@ func TestAutoGenOutputFile(t *testing.T) {
 	}
 }
 
-// TestOutputFilePermissions checks the hardening choice: output holds secrets,
-// so it is created 0600 rather than the Python original's default 0644.
+// TestOutputFilePermissions pins the deliberate choice of ordinary permissions:
+// a new output file gets what any file created with mode 0644 gets here.
 func TestOutputFilePermissions(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("POSIX permissions")
 	}
-	path := filepath.Join(t.TempDir(), "secrets.txt")
+	dir := t.TempDir()
+	reference, err := os.OpenFile(filepath.Join(dir, "reference"), os.O_CREATE|os.O_WRONLY, 0o644)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer reference.Close()
+	want, err := reference.Stat()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	path := filepath.Join(dir, "secrets.txt")
 	if r := exec(t, "-mnemonic-only", "-count", "3", "-output", path); r.code != ExitOK {
 		t.Fatalf("exit = %d, stderr = %s", r.code, r.stderr)
 	}
@@ -426,25 +436,48 @@ func TestOutputFilePermissions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if perm := info.Mode().Perm(); perm != 0o600 {
-		t.Errorf("output file mode = %o, want 600", perm)
+	if !info.Mode().IsRegular() || info.Mode().Perm() != want.Mode().Perm() {
+		t.Errorf("output file mode = %v, want a regular file with %v", info.Mode(), want.Mode().Perm())
 	}
 }
 
-func TestOutputFileTruncatesPreviousRun(t *testing.T) {
+func TestOutputFileReplacesPreviousRunWithWarning(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "out.txt")
 	if err := os.WriteFile(path, []byte(strings.Repeat("stale\n", 100)), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if r := exec(t, "-mnemonic-only", "-count", "2", "-output", path); r.code != ExitOK {
+	r := exec(t, "-mnemonic-only", "-count", "2", "-output", path)
+	if r.code != ExitOK {
 		t.Fatalf("exit = %d", r.code)
+	}
+	if !strings.Contains(r.stderr, "WARN") || !strings.Contains(r.stderr, "already exists") {
+		t.Errorf("no warning about the existing file:\n%s", r.stderr)
 	}
 	data, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if strings.Contains(string(data), "stale") {
-		t.Error("output file was not truncated")
+		t.Error("the old contents are still there")
+	}
+	if got := strings.Count(string(data), "\n"); got != 2 {
+		t.Errorf("file has %d lines, want 2", got)
+	}
+	if runtime.GOOS != "windows" {
+		info, err := os.Stat(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if info.Mode().Perm() != 0o600 {
+			t.Errorf("mode changed to %o, a replaced file must keep its mode", info.Mode().Perm())
+		}
+	}
+}
+
+func TestNewOutputFileGetsNoWarning(t *testing.T) {
+	r := exec(t, "-mnemonic-only", "-output", filepath.Join(t.TempDir(), "new.txt"))
+	if r.code != ExitOK || strings.Contains(r.stderr, "already exists") {
+		t.Errorf("exit = %d, stderr = %s", r.code, r.stderr)
 	}
 }
 
@@ -478,14 +511,14 @@ func TestUsageErrors(t *testing.T) {
 		{"empty language", []string{"-mnemonic-only", "-language", ""}, "unsupported language"},
 		{"bad word count", []string{"-mnemonic-only", "-words", "13"}, "invalid -words"},
 		{"zero words", []string{"-mnemonic-only", "-words", "0"}, "invalid -words"},
-		{"negative words", []string{"-mnemonic-only", "-words", "-12"}, "invalid -words"},
+		{"negative words", []string{"-mnemonic-only", "-words", "-12"}, "negative values"},
 		{"zero length", []string{"-mnemonic", validEN, "-password-length", "0"}, "must be positive"},
-		{"negative length", []string{"-mnemonic", validEN, "-password-length", "-8"}, "must be positive"},
+		{"negative length", []string{"-mnemonic", validEN, "-password-length", "-8"}, "negative values"},
 		{"length above max", []string{"-mnemonic", validEN, "-password-length", "257"}, "exceeds maximum"},
 		{"zero phrases", []string{"-auto-gen", "-phrases", "0"}, "must be positive"},
-		{"negative phrases", []string{"-auto-gen", "-phrases", "-3"}, "must be positive"},
+		{"negative phrases", []string{"-auto-gen", "-phrases", "-3"}, "negative values"},
 		{"too many phrases", []string{"-auto-gen", "-phrases", "101"}, "exceeds maximum"},
-		{"negative jobs", []string{"-auto-gen", "-jobs", "-2"}, "-jobs must be"},
+		{"negative jobs", []string{"-auto-gen", "-jobs", "-2"}, "negative values"},
 		{"unknown flag", []string{"-nonsense"}, "flag provided but not defined"},
 		{"non-numeric count", []string{"-mnemonic-only", "-count", "abc"}, "invalid value"},
 		{"positional argument", []string{"-mnemonic-only", "stray"}, "unexpected positional"},
@@ -504,14 +537,6 @@ func TestUsageErrors(t *testing.T) {
 				t.Errorf("stdout must stay empty, got %q", r.stdout)
 			}
 		})
-	}
-}
-
-// TestPasswordLengthIgnoredWithoutPasswords documents that -password-length is
-// not validated in a mode that produces no passwords, matching the original.
-func TestPasswordLengthIgnoredForMnemonicOnly(t *testing.T) {
-	if r := exec(t, "-mnemonic-only", "-count", "1", "-password-length", "9999"); r.code != ExitOK {
-		t.Errorf("exit = %d, stderr = %s", r.code, r.stderr)
 	}
 }
 
@@ -630,17 +655,6 @@ func TestReadMnemonicIsBounded(t *testing.T) {
 	}
 	if len(got) > 64*1024 {
 		t.Errorf("read %d bytes, want the input to be capped", len(got))
-	}
-}
-
-func TestOpenSinkDiscardsWithoutFallback(t *testing.T) {
-	w, closeFn, err := openSink("", nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer closeFn()
-	if w != io.Discard {
-		t.Error("openSink with no path and no fallback should discard")
 	}
 }
 

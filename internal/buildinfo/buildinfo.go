@@ -39,7 +39,7 @@ func VersionString() string {
 	)
 }
 
-// Short returns a one-line identifier, e.g. "GoPassGen 1.4.0".
+// Short returns a one-line identifier, e.g. "GoPassGen 1.4.1".
 func Short() string {
 	return Name + " " + Version
 }

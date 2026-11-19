@@ -14,16 +14,17 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
-	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"syscall"
 
-	"gopassgen/internal/bip39"
-	"gopassgen/internal/buildinfo"
-	"gopassgen/internal/derive"
-	"gopassgen/internal/logx"
-	"gopassgen/internal/passgen"
+	"github.com/cyberanchor/GoPassGen/internal/bip39"
+	"github.com/cyberanchor/GoPassGen/internal/buildinfo"
+	"github.com/cyberanchor/GoPassGen/internal/derive"
+	"github.com/cyberanchor/GoPassGen/internal/logx"
+	"github.com/cyberanchor/GoPassGen/internal/passgen"
+	"github.com/cyberanchor/GoPassGen/internal/term"
 )
 
 // Exit codes.
@@ -34,7 +35,7 @@ const (
 	ExitError = 1
 	// ExitUsage signals a malformed or contradictory command line.
 	ExitUsage = 2
-	// ExitInterrupted signals SIGINT/SIGTERM during a batch.
+	// ExitInterrupted signals SIGINT/SIGTERM.
 	ExitInterrupted = 130
 )
 
@@ -43,8 +44,17 @@ const (
 	maxNumPhrases          = 100
 	maxMnemonicOnlyCount   = 10_000
 	bigCountRequiresOutput = 1_000
-	outputFileMode         = 0o600 // secrets: owner-only, unlike Python's 0644
 )
+
+// maxMnemonicInput bounds what -mnemonic-stdin reads, so a hostile or accidental
+// stream cannot exhaust memory. A real phrase is far smaller.
+const maxMnemonicInput = 64 * 1024
+
+// hiddenValue replaces user-supplied text in diagnostics under -case-sensitive.
+const hiddenValue = "<hidden>"
+
+// runSelfTests is replaced by a test: an intact binary never fails its self-test.
+var runSelfTests = passgen.SelfTestContext
 
 const banner = `  ____       ____                 ____
  / ___| ___ |  _ \ __ _ ___ ___  / ___| ___ _ __
@@ -69,6 +79,7 @@ type options struct {
 	logLevel       string
 	logFormat      string
 	noColor        bool
+	caseSensitive  bool
 	selfTest       bool
 	showVersion    bool
 
@@ -78,6 +89,23 @@ type options struct {
 }
 
 func (o *options) wasSet(name string) bool { return o.set[name] }
+
+// quoted renders a user-supplied value for a diagnostic. Such a value may be a
+// mnemonic pasted into the wrong place, so -case-sensitive hides it.
+func (o *options) quoted(value string) string {
+	if o.caseSensitive {
+		return hiddenValue
+	}
+	return strconv.Quote(value)
+}
+
+// pathAttr is the log attribute for the -output path.
+func (o *options) pathAttr() slog.Attr {
+	if o.caseSensitive {
+		return slog.String("path", hiddenValue)
+	}
+	return slog.String("path", o.output)
+}
 
 // usageError marks a command line problem, which exits with ExitUsage.
 type usageError struct{ err error }
@@ -89,43 +117,130 @@ func usagef(format string, args ...any) error {
 	return usageError{fmt.Errorf(format, args...)}
 }
 
+// decimalFlag is an integer flag that accepts only plain decimal digits.
+//
+// flag.IntVar also understands base prefixes, so "016" silently meant 14 and
+// "-count 010" produced 8 lines, while PyPassGen reads them as 16 and 10. Signs
+// are refused here too: no option has a meaningful negative value, and this way
+// one is rejected in every mode, including those that do not use the option.
+type decimalFlag struct{ target *int }
+
+func (d decimalFlag) String() string {
+	if d.target == nil {
+		return "0"
+	}
+	return strconv.Itoa(*d.target)
+}
+
+func (d decimalFlag) Set(s string) error {
+	digits := strings.TrimPrefix(s, "-")
+	switch {
+	case digits == "" || strings.Trim(digits, "0123456789") != "":
+		return errors.New("must be a decimal integer")
+	case digits != s:
+		return errors.New("negative values are not allowed")
+	}
+	n, err := strconv.Atoi(s)
+	if err != nil {
+		return errors.New("value is too large")
+	}
+	*d.target = n
+	return nil
+}
+
 // Run executes the CLI and returns a process exit code.
-// It installs a SIGINT/SIGTERM handler so long batches abort cleanly.
+//
+// The first SIGINT or SIGTERM cancels the run so it can clean up and exit with
+// ExitInterrupted. After that the default handling is restored, so a second
+// signal ends the process at once even if an operation is stuck.
 func Run(args []string, stdout, stderr io.Writer) int {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	context.AfterFunc(ctx, stop)
 	return RunContext(ctx, args, os.Stdin, stdout, stderr)
 }
 
 // RunContext is Run with caller-supplied context and stdin. Tests use it to
 // exercise every path without touching process state.
 func RunContext(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
-	opts, fs, err := parse(args, stderr)
-	if err != nil {
-		if errors.Is(err, flag.ErrHelp) {
-			return ExitOK
+	opts, fs, err := parse(args)
+	if errors.Is(err, flag.ErrHelp) {
+		printUsage(stderr, fs)
+		return ExitOK
+	}
+
+	// The logger comes first: even a bad command line is reported in the level
+	// and format the user asked for.
+	log, format, logErr := newLogger(opts, stderr)
+	if err == nil {
+		err = logErr
+	}
+	if err == nil {
+		err = run(ctx, opts, stdin, stdout, log)
+	}
+
+	var (
+		ue usageError
+		oe *outputError
+	)
+	switch {
+	case err == nil:
+		return ExitOK
+	case errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded):
+		log.Warn("interrupted")
+		return ExitInterrupted
+	case errors.As(err, &ue):
+		log.Error("invalid usage", slog.String("error", err.Error()))
+		if format == logx.FormatPretty && log.Enabled(ctx, slog.LevelError) {
+			fmt.Fprintln(stderr)
+			printUsage(stderr, fs)
 		}
-		fmt.Fprintf(stderr, "error: %v\n\n", err)
-		fs.Usage()
 		return ExitUsage
+	case errors.As(err, &oe):
+		log.Error("failed", slog.String("error", err.Error()), opts.pathAttr())
+		return ExitError
+	default:
+		log.Error("failed", slog.String("error", err.Error()))
+		return ExitError
+	}
+}
+
+// newLogger builds the logger from the parsed options. It always returns a
+// usable logger, falling back to the defaults for an invalid setting, so that
+// the invalid setting itself can be reported.
+func newLogger(opts *options, stderr io.Writer) (*slog.Logger, logx.Format, error) {
+	var firstErr error
+	fail := func(err error) {
+		if firstErr == nil {
+			firstErr = err
+		}
 	}
 
 	level := slog.LevelInfo
 	if opts.logLevel != "" {
-		level, err = logx.ParseLevel(opts.logLevel)
-		if err != nil {
-			fmt.Fprintf(stderr, "error: %v\n", err)
-			return ExitUsage
+		parsed, err := logx.ParseLevel(opts.logLevel)
+		switch {
+		case err == nil:
+			level = parsed
+		case opts.caseSensitive:
+			fail(usagef("unknown log level %s (want: silent, error, warn, info, debug)", hiddenValue))
+		default:
+			fail(usageError{err})
 		}
 	}
-	if opts.verbose && level > slog.LevelDebug {
+	if opts.verbose {
+		if firstErr == nil && opts.wasSet("log-level") && level != slog.LevelDebug {
+			fail(usagef("-v/-verbose contradicts -log-level %s", opts.quoted(opts.logLevel)))
+		}
 		level = slog.LevelDebug
 	}
 
 	format, err := logx.ParseFormat(opts.logFormat)
 	if err != nil {
-		fmt.Fprintf(stderr, "error: %v\n", err)
-		return ExitUsage
+		if opts.caseSensitive {
+			err = fmt.Errorf("unknown log format %s (want: pretty, json)", hiddenValue)
+		}
+		fail(usageError{err})
 	}
 
 	log := logx.New(stderr, logx.Options{
@@ -133,92 +248,158 @@ func RunContext(ctx context.Context, args []string, stdin io.Reader, stdout, std
 		Format: format,
 		Color:  logx.ColorEnabled(stderr, opts.noColor),
 	})
-
-	err = run(ctx, opts, stdin, stdout, log)
-	if err == nil {
-		return ExitOK
-	}
-
-	var ue usageError
-	switch {
-	case errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded):
-		log.Warn("interrupted")
-		return ExitInterrupted
-	case errors.As(err, &ue):
-		log.Error("invalid usage", slog.String("error", err.Error()))
-		fs.Usage()
-		return ExitUsage
-	default:
-		log.Error("failed", slog.String("error", err.Error()))
-		return ExitError
-	}
+	return log, format, firstErr
 }
 
-func parse(args []string, stderr io.Writer) (*options, *flag.FlagSet, error) {
-	opts := &options{}
+func parse(args []string) (*options, *flag.FlagSet, error) {
+	opts := &options{
+		phrases:        1,
+		words:          12,
+		passwordLength: derive.DefaultPasswordLength,
+	}
 	fs := flag.NewFlagSet("gopassgen", flag.ContinueOnError)
-	fs.SetOutput(stderr)
+	// All reporting happens in RunContext, once and in the selected log format.
+	fs.SetOutput(io.Discard)
+	fs.Usage = func() {}
 
 	fs.StringVar(&opts.mnemonic, "mnemonic", "", "BIP-39 mnemonic phrase to derive a password from")
 	fs.BoolVar(&opts.mnemonicStdin, "mnemonic-stdin", false, "read the mnemonic from stdin (keeps it out of shell history and ps)")
 	fs.BoolVar(&opts.autoGen, "auto-gen", false, "generate mnemonic+password pairs")
 	fs.BoolVar(&opts.mnemonicOnly, "mnemonic-only", false, "generate mnemonics only, no passwords")
-	fs.IntVar(&opts.count, "count", 0, fmt.Sprintf("number of mnemonics for -mnemonic-only (default 1, max %d)", maxMnemonicOnlyCount))
-	fs.IntVar(&opts.phrases, "phrases", 1, fmt.Sprintf("number of pairs for -auto-gen (max %d)", maxNumPhrases))
-	fs.IntVar(&opts.words, "words", 12, fmt.Sprintf("words per phrase %v", bip39.WordCounts()))
-	fs.IntVar(&opts.passwordLength, "password-length", derive.DefaultPasswordLength, fmt.Sprintf("password length (max %d)", derive.MaxPasswordLength))
+	fs.Var(decimalFlag{&opts.count}, "count", fmt.Sprintf("generate `N` mnemonics with -mnemonic-only (default 1, max %d)", maxMnemonicOnlyCount))
+	fs.Var(decimalFlag{&opts.phrases}, "phrases", fmt.Sprintf("generate `N` pairs with -auto-gen (max %d)", maxNumPhrases))
+	fs.Var(decimalFlag{&opts.words}, "words", fmt.Sprintf("`N` words per generated phrase %v", bip39.WordCounts()))
+	fs.Var(decimalFlag{&opts.passwordLength}, "password-length", fmt.Sprintf("password length `N` (max %d)", derive.MaxPasswordLength))
 	fs.StringVar(&opts.language, "language", "english", "wordlist language "+strings.Join(bip39.Languages(), "|"))
-	fs.StringVar(&opts.output, "output", "", "write results to this file (created with mode 0600)")
-	fs.IntVar(&opts.jobs, "jobs", 0, "parallel derivations (default: number of CPUs)")
+	fs.StringVar(&opts.output, "output", "", "write results to this file instead of stdout; an existing file is replaced after a warning")
+	fs.Var(decimalFlag{&opts.jobs}, "jobs", "run `N` derivations in parallel with -auto-gen (default: number of CPUs)")
 	fs.BoolVar(&opts.verbose, "v", false, "shorthand for -log-level debug")
 	fs.BoolVar(&opts.verbose, "verbose", false, "shorthand for -log-level debug")
 	fs.StringVar(&opts.logLevel, "log-level", "", "silent|error|warn|info|debug (default info)")
 	fs.StringVar(&opts.logFormat, "log-format", "", "pretty|json (default pretty)")
 	fs.BoolVar(&opts.noColor, "no-color", false, "disable ANSI colour in logs")
+	fs.BoolVar(&opts.caseSensitive, "case-sensitive", false, "treat this case as sensitive: hide phrases, file names and other values you typed from logs and errors")
 	fs.BoolVar(&opts.selfTest, "self-test", false, "run built-in known-answer tests and exit")
 	fs.BoolVar(&opts.showVersion, "version", false, "print version and exit")
 
-	fs.Usage = func() { printUsage(stderr, fs) }
+	positional, err := parseAll(fs, args)
 
-	if err := fs.Parse(args); err != nil {
-		return opts, fs, err
-	}
 	opts.set = make(map[string]bool, fs.NFlag())
 	fs.Visit(func(f *flag.Flag) { opts.set[f.Name] = true })
+	// Decided from the raw arguments: the flag must also protect a value that
+	// comes before it, or one the parser never reaches.
+	opts.caseSensitive = wantsHiddenValues(args)
 
-	if fs.NArg() > 0 {
-		return opts, fs, usagef("unexpected positional argument %q (did you forget to quote the mnemonic?)", fs.Arg(0))
+	switch {
+	case errors.Is(err, flag.ErrHelp):
+		return opts, fs, err
+	case err != nil && opts.caseSensitive:
+		return opts, fs, usageError{hideFlagError(fs, err)}
+	case err != nil:
+		return opts, fs, usageError{err}
+	case len(positional) > 0:
+		return opts, fs, usagef("unexpected positional argument %s (did you forget to quote the mnemonic?)",
+			opts.quoted(positional[0]))
 	}
 	return opts, fs, nil
+}
+
+// parseAll keeps parsing after an error or a positional argument and returns
+// the first error. The flag package stops at either one, which would leave
+// -log-format, -log-level and -case-sensitive unseen exactly when an error has
+// to be reported.
+func parseAll(fs *flag.FlagSet, args []string) (positional []string, first error) {
+	rest := args
+	for {
+		err := fs.Parse(rest)
+		next := fs.Args()
+		if err != nil && first == nil {
+			first = err
+		}
+		if len(next) == 0 {
+			return positional, first
+		}
+		if err == nil {
+			positional = append(positional, next[0])
+		}
+		if err == nil || len(next) == len(rest) {
+			next = next[1:] // always make progress
+		}
+		rest = next
+	}
+}
+
+// wantsHiddenValues reports whether -case-sensitive is in effect. A mention that
+// the parser would read as another flag's value still counts: hiding too much
+// is harmless, printing a phrase is not.
+func wantsHiddenValues(args []string) bool {
+	hide := false
+	for _, arg := range args {
+		if !strings.HasPrefix(arg, "-") {
+			continue
+		}
+		name, value, hasValue := strings.Cut(strings.TrimLeft(arg, "-"), "=")
+		if name != "case-sensitive" {
+			continue
+		}
+		hide = true
+		if hasValue {
+			if v, err := strconv.ParseBool(value); err == nil {
+				hide = v
+			}
+		}
+	}
+	return hide
+}
+
+// hideFlagError rewrites a flag package error so it contains no user input.
+// Anything unrecognised becomes a generic message, so a change in the wording
+// of the flag package can cost detail but can never leak a value.
+func hideFlagError(fs *flag.FlagSet, err error) error {
+	msg := err.Error()
+	if strings.HasPrefix(msg, "flag needs an argument: ") {
+		return err // it names a defined flag and nothing else
+	}
+	if i := strings.LastIndex(msg, " for "); strings.HasPrefix(msg, "invalid ") && i >= 0 {
+		name, reason, ok := strings.Cut(strings.TrimPrefix(msg[i+len(" for "):], "flag "), ": ")
+		name = strings.TrimPrefix(name, "-")
+		if ok && fs.Lookup(name) != nil {
+			return fmt.Errorf("invalid value %s for -%s: %s", hiddenValue, name, reason)
+		}
+	}
+	return fmt.Errorf("unknown or malformed flag %s", hiddenValue)
 }
 
 func printUsage(w io.Writer, fs *flag.FlagSet) {
 	fmt.Fprintf(w, "%s  v%s\n\n", banner, buildinfo.Version)
 	fmt.Fprintf(w, "Deterministic passwords from BIP-39 mnemonic phrases.\n")
-	fmt.Fprintf(w, "Bit-compatible with PyPassGen %s.\n\n", buildinfo.DerivationVersion)
-	fmt.Fprintf(w, "Usage:\n  gopassgen -mnemonic \"word1 ... word12\" [-password-length N]\n")
-	fmt.Fprintf(w, "  gopassgen -mnemonic-stdin [-password-length N]\n")
+	fmt.Fprintf(w, "Bit-compatible with PyPassGen %s.\n\n", strings.TrimPrefix(buildinfo.DerivationVersion, "pypassgen-"))
+	fmt.Fprintf(w, "Usage:\n  gopassgen -mnemonic \"word1 ... word12\" [-password-length N] [-output FILE]\n")
+	fmt.Fprintf(w, "  gopassgen -mnemonic-stdin [-password-length N] [-output FILE]\n")
 	fmt.Fprintf(w, "  gopassgen -mnemonic-only [-count N] [-words N] [-output FILE]\n")
-	fmt.Fprintf(w, "  gopassgen -auto-gen [-phrases N] [-words N] [-password-length N] [-output FILE]\n")
+	fmt.Fprintf(w, "  gopassgen -auto-gen [-phrases N] [-words N] [-password-length N] [-jobs N] [-output FILE]\n")
 	fmt.Fprintf(w, "  gopassgen -self-test | -version\n\nOptions:\n")
+	fs.SetOutput(w)
 	fs.PrintDefaults()
+	fs.SetOutput(io.Discard)
 	fmt.Fprintf(w, "\nExit codes:\n  0 success   1 error   2 usage   130 interrupted\n")
 	fmt.Fprintf(w, "\nSecurity:\n")
 	fmt.Fprintf(w, "  -mnemonic puts the phrase in your shell history and in ps output.\n")
 	fmt.Fprintf(w, "  Prefer -mnemonic-stdin for anything you actually use.\n")
+	fmt.Fprintf(w, "  -output files get ordinary permissions (0644 minus your umask).\n")
 }
 
 func run(ctx context.Context, opts *options, stdin io.Reader, stdout io.Writer, log *slog.Logger) error {
-	switch {
-	case opts.showVersion:
-		fmt.Fprintln(stdout, buildinfo.VersionString())
-		return nil
-	case opts.selfTest:
-		return runSelfTest(stdout, log)
-	}
-
 	if err := validateModes(opts); err != nil {
 		return err
+	}
+
+	stdout = contextWriter{ctx: ctx, w: stdout}
+	switch {
+	case opts.showVersion:
+		return writeText(stdout, buildinfo.VersionString()+"\n")
+	case opts.selfTest:
+		return runSelfTest(ctx, stdout, log)
 	}
 
 	// The language applies to the whole run, so it is attached once here and
@@ -235,20 +416,23 @@ func run(ctx context.Context, opts *options, stdin io.Reader, stdout io.Writer, 
 	}
 
 	switch {
-	case opts.mnemonic != "" || opts.mnemonicStdin:
-		return runSingle(opts, gen, stdin, stdout, log)
 	case opts.mnemonicOnly:
 		return runMnemonicOnly(ctx, opts, gen, stdout, log)
 	case opts.autoGen:
 		return runAutoGen(ctx, opts, gen, stdout, log)
 	default:
-		return usagef("no mode selected: use -mnemonic, -mnemonic-stdin, -mnemonic-only or -auto-gen")
+		return runSingle(ctx, opts, gen, stdin, stdout, log)
 	}
 }
 
-// validateModes rejects contradictory or out-of-range combinations before any
-// work starts, so the tool never half-produces output and then fails.
+// validateModes rejects contradictory, meaningless or out-of-range combinations
+// before any work starts, so the tool never half-produces output and then fails,
+// and never silently ignores something the user asked for.
 func validateModes(opts *options) error {
+	if opts.showVersion || opts.selfTest {
+		return validateInfoMode(opts)
+	}
+
 	hasMnemonic := opts.mnemonic != "" || opts.mnemonicStdin
 
 	if opts.mnemonic != "" && opts.mnemonicStdin {
@@ -260,15 +444,36 @@ func validateModes(opts *options) error {
 	if opts.autoGen && opts.mnemonicOnly {
 		return usagef("cannot use -auto-gen and -mnemonic-only together")
 	}
-	if !bip39.IsSupported(opts.language) {
-		return usagef("unsupported language %q (supported: %s)",
-			opts.language, strings.Join(bip39.Languages(), ", "))
+	if !hasMnemonic && !opts.autoGen && !opts.mnemonicOnly {
+		return usagef("no mode selected: use -mnemonic, -mnemonic-stdin, -mnemonic-only or -auto-gen")
 	}
+	if !bip39.IsSupported(opts.language) {
+		return usagef("unsupported language %s (supported: %s)",
+			opts.quoted(opts.language), strings.Join(bip39.Languages(), ", "))
+	}
+	if opts.wasSet("output") && opts.output == "" {
+		return usagef("-output needs a file name")
+	}
+
+	generates := opts.autoGen || opts.mnemonicOnly
+	for _, rule := range []struct {
+		flag    string
+		applies bool
+		modes   string
+	}{
+		{"count", opts.mnemonicOnly, "-mnemonic-only"},
+		{"phrases", generates, "-auto-gen and -mnemonic-only"},
+		{"words", generates, "-auto-gen and -mnemonic-only"},
+		{"password-length", !opts.mnemonicOnly, "-mnemonic, -mnemonic-stdin and -auto-gen"},
+		{"jobs", opts.autoGen, "-auto-gen"},
+	} {
+		if opts.wasSet(rule.flag) && !rule.applies {
+			return usagef("-%s applies only to %s", rule.flag, rule.modes)
+		}
+	}
+
 	if _, ok := bip39.StrengthBits(opts.words); !ok {
 		return usagef("invalid -words %d (want one of %v)", opts.words, bip39.WordCounts())
-	}
-	if opts.jobs < 0 {
-		return usagef("-jobs must be >= 0, got %d", opts.jobs)
 	}
 
 	// Password length only matters when a password is produced.
@@ -306,6 +511,27 @@ func validateModes(opts *options) error {
 	return nil
 }
 
+// validateInfoMode checks -version and -self-test, which take no work options.
+// The logging flags stay allowed.
+func validateInfoMode(opts *options) error {
+	if opts.showVersion && opts.selfTest {
+		return usagef("cannot use -version and -self-test together")
+	}
+	mode := "-version"
+	if opts.selfTest {
+		mode = "-self-test"
+	}
+	for _, name := range []string{
+		"mnemonic", "mnemonic-stdin", "auto-gen", "mnemonic-only", "count", "phrases",
+		"words", "password-length", "language", "output", "jobs",
+	} {
+		if opts.wasSet(name) {
+			return usagef("cannot use %s together with -%s", mode, name)
+		}
+	}
+	return nil
+}
+
 // effectiveCount reproduces the Python fallback for -mnemonic-only:
 // an explicit -count wins, otherwise -phrases is used, otherwise 1.
 //
@@ -323,11 +549,18 @@ func effectiveCount(opts *options) int {
 	return 1
 }
 
-func runSingle(opts *options, gen *passgen.Generator, stdin io.Reader, stdout io.Writer, log *slog.Logger) error {
+func runSingle(ctx context.Context, opts *options, gen *passgen.Generator, stdin io.Reader, stdout io.Writer, log *slog.Logger) error {
+	// The destination is checked first, so a bad -output is reported before the
+	// user types a phrase and before the expensive derivation.
+	out, err := openSink(ctx, opts, stdout, log)
+	if err != nil {
+		return err
+	}
+	defer out.abort()
+
 	mnemonic := opts.mnemonic
 	if opts.mnemonicStdin {
-		var err error
-		mnemonic, err = readMnemonic(stdin)
+		mnemonic, err = readMnemonicInput(ctx, stdin, log)
 		if err != nil {
 			return err
 		}
@@ -337,24 +570,57 @@ func runSingle(opts *options, gen *passgen.Generator, stdin io.Reader, stdout io
 
 	log.Info("deriving password", slog.Int("length", opts.passwordLength))
 
-	pw, err := gen.Password(mnemonic, opts.passwordLength)
+	pw, err := gen.PasswordContext(ctx, mnemonic, opts.passwordLength)
 	if err != nil {
 		return err
 	}
 	defer derive.Wipe(pw)
 
-	w := bufio.NewWriter(stdout)
-	if _, err := w.Write(pw); err != nil {
-		return fmt.Errorf("writing password: %w", err)
+	out.write(pw)
+	out.writeString("\n")
+	if err := out.commit(); err != nil {
+		return err
 	}
-	if err := w.WriteByte('\n'); err != nil {
-		return fmt.Errorf("writing password: %w", err)
-	}
-	if err := w.Flush(); err != nil {
-		return fmt.Errorf("writing password: %w", err)
+	if opts.output != "" {
+		log.Info("wrote password", opts.pathAttr())
 	}
 	log.Info("done")
 	return nil
+}
+
+// readMnemonicInput reads the phrase from stdin and gives up when ctx is
+// cancelled. The read itself cannot be interrupted, so it runs in a goroutine
+// that is abandoned on cancellation; the process is about to exit anyway.
+func readMnemonicInput(ctx context.Context, stdin io.Reader, log *slog.Logger) (string, error) {
+	read := readMnemonic
+	if f, ok := stdin.(*os.File); ok && term.IsTerminal(f.Fd()) {
+		// On a terminal one line is the whole input: waiting for end-of-file
+		// would leave Enter apparently doing nothing.
+		read = readMnemonicLine
+		restore, err := term.DisableEcho(f.Fd())
+		if err != nil {
+			log.Warn("cannot hide terminal input, the phrase will be visible", slog.String("error", err.Error()))
+		} else {
+			defer func() { _ = restore() }()
+		}
+		log.Info("type the mnemonic and press Enter")
+	}
+
+	type result struct {
+		mnemonic string
+		err      error
+	}
+	done := make(chan result, 1)
+	go func() {
+		m, err := read(stdin)
+		done <- result{m, err}
+	}()
+	select {
+	case r := <-done:
+		return r.mnemonic, r.err
+	case <-ctx.Done():
+		return "", ctx.Err()
+	}
 }
 
 // readMnemonic reads a phrase from r, stripping exactly one trailing newline.
@@ -362,11 +628,23 @@ func runSingle(opts *options, gen *passgen.Generator, stdin io.Reader, stdout io
 // No other whitespace is touched: the reference implementation hashes the
 // phrase verbatim, so trimming spaces here would change the derived password.
 func readMnemonic(r io.Reader) (string, error) {
-	data, err := io.ReadAll(io.LimitReader(r, 64*1024))
+	data, err := io.ReadAll(io.LimitReader(r, maxMnemonicInput))
 	if err != nil {
 		return "", fmt.Errorf("reading mnemonic from stdin: %w", err)
 	}
-	s := string(data)
+	return trimMnemonicInput(string(data))
+}
+
+// readMnemonicLine reads a phrase that ends at the first newline.
+func readMnemonicLine(r io.Reader) (string, error) {
+	line, err := bufio.NewReader(io.LimitReader(r, maxMnemonicInput)).ReadString('\n')
+	if err != nil && !errors.Is(err, io.EOF) {
+		return "", fmt.Errorf("reading mnemonic from stdin: %w", err)
+	}
+	return trimMnemonicInput(line)
+}
+
+func trimMnemonicInput(s string) (string, error) {
 	s = strings.TrimSuffix(s, "\n")
 	s = strings.TrimSuffix(s, "\r")
 	if s == "" {
@@ -382,11 +660,11 @@ func runMnemonicOnly(ctx context.Context, opts *options, gen *passgen.Generator,
 		slog.Int("words", opts.words),
 	)
 
-	sink, closeSink, err := openSink(opts.output, stdout)
+	out, err := openSink(ctx, opts, stdout, log)
 	if err != nil {
 		return err
 	}
-	defer closeSink()
+	defer out.abort()
 
 	for i := 0; i < count; i++ {
 		if err := ctx.Err(); err != nil {
@@ -396,14 +674,19 @@ func runMnemonicOnly(ctx context.Context, opts *options, gen *passgen.Generator,
 		if err != nil {
 			return err
 		}
-		if _, err := fmt.Fprintln(sink, m); err != nil {
-			return fmt.Errorf("writing mnemonic: %w", err)
+		out.writeString(m)
+		out.writeString("\n")
+		if out.err != nil {
+			return out.err
 		}
+	}
+	if err := out.commit(); err != nil {
+		return err
 	}
 	if opts.output != "" {
 		log.Info("wrote mnemonics",
 			slog.Int("count", count),
-			slog.String("path", opts.output),
+			opts.pathAttr(),
 		)
 	}
 	return nil
@@ -416,6 +699,14 @@ func runAutoGen(ctx context.Context, opts *options, gen *passgen.Generator, stdo
 		slog.Int("length", opts.passwordLength),
 	)
 
+	// Opened before the derivations: finding out afterwards that the file cannot
+	// be written would throw all of that work away.
+	out, err := openSink(ctx, opts, stdout, log)
+	if err != nil {
+		return err
+	}
+	defer out.abort()
+
 	pairs, err := gen.Pairs(ctx, opts.phrases, opts.words, opts.passwordLength, opts.jobs)
 	if err != nil {
 		return err
@@ -426,93 +717,55 @@ func runAutoGen(ctx context.Context, opts *options, gen *passgen.Generator, stdo
 		}
 	}()
 
-	var (
-		file      io.Writer
-		closeFile = func() {}
-	)
-	if opts.output != "" {
-		f, closer, err := openSink(opts.output, nil)
-		if err != nil {
-			return err
-		}
-		file, closeFile = f, closer
-	}
-	defer closeFile()
-
-	out := bufio.NewWriter(stdout)
 	for i, p := range pairs {
-		if _, err := fmt.Fprintf(out, "Mnemonic %d: %s\nPassword %d: %s\n\n",
-			i+1, p.Mnemonic, i+1, p.Password); err != nil {
-			return fmt.Errorf("writing pair: %w", err)
+		if opts.output != "" {
+			out.writeString(p.Mnemonic)
+			out.writeString("\n")
+			out.write(p.Password)
+			out.writeString("\n")
+			continue
 		}
-		if file != nil {
-			if _, err := fmt.Fprintf(file, "%s\n%s\n", p.Mnemonic, p.Password); err != nil {
-				return fmt.Errorf("writing pair to %s: %w", opts.output, err)
-			}
-		}
+		n := strconv.Itoa(i + 1)
+		out.writeString("Mnemonic " + n + ": ")
+		out.writeString(p.Mnemonic)
+		out.writeString("\nPassword " + n + ": ")
+		out.write(p.Password)
+		out.writeString("\n\n")
 	}
-	if err := out.Flush(); err != nil {
-		return fmt.Errorf("writing pairs: %w", err)
+	if err := out.commit(); err != nil {
+		return err
 	}
 	if opts.output != "" {
 		log.Info("wrote pairs",
 			slog.Int("pairs", len(pairs)),
-			slog.String("path", opts.output),
+			opts.pathAttr(),
 		)
 	}
 	return nil
 }
 
-// openSink returns a buffered writer for path, or for fallback when path is
-// empty. The returned close function flushes and, for files, closes and
-// reports nothing — flush errors are surfaced by the caller's writes where
-// possible, so the close function is deliberately side-effect free on error
-// paths that already failed.
-func openSink(path string, fallback io.Writer) (io.Writer, func(), error) {
-	if path == "" {
-		if fallback == nil {
-			return io.Discard, func() {}, nil
-		}
-		w := bufio.NewWriter(fallback)
-		return w, func() { _ = w.Flush() }, nil
-	}
-
-	if dir := filepath.Dir(path); dir != "" && dir != "." {
-		if err := os.MkdirAll(dir, 0o755); err != nil {
-			return nil, nil, fmt.Errorf("creating directory for %s: %w", path, err)
-		}
-	}
-
-	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, outputFileMode)
-	if err != nil {
-		return nil, nil, fmt.Errorf("opening %s: %w", path, err)
-	}
-	w := bufio.NewWriterSize(f, 1<<20)
-	return w, func() {
-		_ = w.Flush()
-		_ = f.Sync()
-		_ = f.Close()
-	}, nil
-}
-
-func runSelfTest(stdout io.Writer, log *slog.Logger) error {
+func runSelfTest(ctx context.Context, stdout io.Writer, log *slog.Logger) error {
 	log.Info("self-test",
 		slog.String("version", buildinfo.Version),
 		slog.String("derivation", buildinfo.DerivationVersion),
 		slog.String("platform", runtime.GOOS+"/"+runtime.GOARCH),
 	)
 
-	results, err := passgen.SelfTest()
+	results, testErr := runSelfTests(ctx)
+
+	var report strings.Builder
 	for _, r := range results {
 		status := "PASS"
 		if !r.Passed {
 			status = "FAIL"
 		}
-		fmt.Fprintf(stdout, "%-4s %-12s %s\n", status, r.Name, r.Detail)
+		fmt.Fprintf(&report, "%-4s %-12s %s\n", status, r.Name, r.Detail)
 	}
-	if err != nil {
+	if testErr == nil {
+		fmt.Fprintf(&report, "\nall %d checks passed\n", len(results))
+	}
+	if err := writeText(stdout, report.String()); err != nil {
 		return err
 	}
-	fmt.Fprintf(stdout, "\nall %d checks passed\n", len(results))
-	return nil
+	return testErr
 }

@@ -5,14 +5,16 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
-	"gopassgen/internal/bip39"
-	"gopassgen/internal/derive"
-	"gopassgen/internal/logx"
+	"github.com/cyberanchor/GoPassGen/internal/bip39"
+	"github.com/cyberanchor/GoPassGen/internal/derive"
+	"github.com/cyberanchor/GoPassGen/internal/logx"
 )
 
 const (
@@ -376,15 +378,128 @@ func TestSelfTest(t *testing.T) {
 	}
 }
 
-func TestSelfTestDigestsMatchEmbeddedWordlists(t *testing.T) {
-	if len(wordlistDigests) != len(bip39.Languages()) {
-		t.Fatalf("digest table covers %d languages, wordlists cover %d",
-			len(wordlistDigests), len(bip39.Languages()))
+// TestSelfTestReportsFailure proves that a wrong answer fails the self-test: the
+// check is worthless if it can only ever pass.
+func TestSelfTestReportsFailure(t *testing.T) {
+	saved := katPasswordZeroKey
+	katPasswordZeroKey = "not the expected password"
+	defer func() { katPasswordZeroKey = saved }()
+
+	results, err := SelfTest()
+	if err == nil {
+		t.Fatal("self-test passed with a wrong known answer")
 	}
-	for _, lang := range bip39.Languages() {
-		if _, ok := wordlistDigests[lang]; !ok {
-			t.Errorf("no digest recorded for %q", lang)
+	if !strings.Contains(err.Error(), "stream") {
+		t.Errorf("error %q does not name the failed check", err)
+	}
+	for _, r := range results {
+		if want := r.Name != "stream"; r.Passed != want {
+			t.Errorf("check %q: passed = %v, want %v", r.Name, r.Passed, want)
 		}
+	}
+}
+
+func TestSelfTestContextCancelled(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if results, err := SelfTestContext(ctx); !errors.Is(err, context.Canceled) || results != nil {
+		t.Errorf("results = %v, err = %v, want no results and context.Canceled", results, err)
+	}
+}
+
+// cancelAfterPolls is cancelled once Err has been called a fixed number of times,
+// which puts the cancellation reliably in the middle of a derivation.
+type cancelAfterPolls struct {
+	context.Context
+	polls atomic.Int32
+}
+
+func (c *cancelAfterPolls) Err() error {
+	if c.polls.Add(-1) < 0 {
+		return context.Canceled
+	}
+	return nil
+}
+
+func TestSelfTestStopsDuringTheKeyDerivation(t *testing.T) {
+	ctx := &cancelAfterPolls{Context: context.Background()}
+	ctx.polls.Store(5) // more than the short seed stage uses
+	if results, err := SelfTestContext(ctx); !errors.Is(err, context.Canceled) || results != nil {
+		t.Errorf("results = %v, err = %v, want no results and context.Canceled", results, err)
+	}
+}
+
+func TestPasswordStopsDuringTheKeyDerivation(t *testing.T) {
+	g := newTestGen(t, "english")
+	ctx := &cancelAfterPolls{Context: context.Background()}
+	ctx.polls.Store(5)
+	if pw, err := g.PasswordContext(ctx, validEN, 12); !errors.Is(err, context.Canceled) || pw != nil {
+		t.Errorf("pw = %q, err = %v, want context.Canceled", pw, err)
+	}
+}
+
+// stubPairs replaces the expensive derivation so a batch can be observed.
+func stubPairs(t *testing.T, fn func(n int) (Pair, error)) *Generator {
+	t.Helper()
+	g, err := New("english", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var (
+		mu   sync.Mutex
+		next int
+	)
+	g.pair = func(context.Context, int, int) (Pair, error) {
+		mu.Lock()
+		n := next
+		next++
+		mu.Unlock()
+		return fn(n)
+	}
+	return g
+}
+
+func TestPairsKeepsTaskOrder(t *testing.T) {
+	g := stubPairs(t, func(n int) (Pair, error) {
+		return Pair{Mnemonic: strconv.Itoa(n)}, nil
+	})
+	pairs, err := g.Pairs(context.Background(), 8, 12, 12, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i, p := range pairs {
+		if p.Mnemonic != strconv.Itoa(i) {
+			t.Fatalf("position %d holds item %s", i, p.Mnemonic)
+		}
+	}
+}
+
+func TestPairsWipesPasswordsOnFailure(t *testing.T) {
+	first := []byte("first password")
+	boom := errors.New("boom")
+	g := stubPairs(t, func(n int) (Pair, error) {
+		if n == 0 {
+			return Pair{Mnemonic: "m", Password: first}, nil
+		}
+		return Pair{}, boom
+	})
+	if _, err := g.Pairs(context.Background(), 2, 12, 12, 1); !errors.Is(err, boom) {
+		t.Fatalf("err = %v, want %v", err, boom)
+	}
+	if strings.Trim(string(first), "\x00") != "" {
+		t.Errorf("password survived the failed batch: %q", first)
+	}
+}
+
+func TestPasswordContextCancelled(t *testing.T) {
+	g, err := New("english", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if pw, err := g.PasswordContext(ctx, validEN, 12); !errors.Is(err, context.Canceled) || pw != nil {
+		t.Errorf("pw = %q, err = %v, want context.Canceled", pw, err)
 	}
 }
 

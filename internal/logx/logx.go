@@ -7,7 +7,7 @@
 //   - a human-readable "timestamp - LEVEL - message key=value" layout that
 //     matches the PyPassGen output people are used to;
 //   - ANSI colour, enabled only for a real terminal and never when NO_COLOR
-//     is set;
+//     has a value;
 //   - a "silent" level, level parsing for the CLI flag, and a JSON mode for
 //     machine consumption.
 //
@@ -30,6 +30,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/cyberanchor/GoPassGen/internal/term"
 )
 
 // LevelSilent is above every standard level, so no record is ever emitted.
@@ -311,25 +313,18 @@ func (h *prettyHandler) format(r slog.Record, attrs string) string {
 
 // ColorEnabled decides whether ANSI colour should be used for w.
 //
-// Colour requires: not explicitly disabled, NO_COLOR unset, and w being a
-// character device. Redirected or piped output therefore never contains
-// escape sequences.
+// Colour requires: not explicitly disabled, NO_COLOR unset or empty (as
+// no-color.org specifies), and w being a real terminal. Redirected or piped
+// output, and character devices such as /dev/null, never get escape sequences.
 func ColorEnabled(w io.Writer, disabled bool) bool {
-	if disabled {
-		return false
-	}
-	if _, ok := os.LookupEnv("NO_COLOR"); ok {
+	if disabled || os.Getenv("NO_COLOR") != "" {
 		return false
 	}
 	f, ok := w.(*os.File)
 	if !ok {
 		return false
 	}
-	info, err := f.Stat()
-	if err != nil {
-		return false
-	}
-	return info.Mode()&os.ModeCharDevice != 0
+	return term.IsTerminal(f.Fd())
 }
 
 // ---------------------------------------------------------------------------

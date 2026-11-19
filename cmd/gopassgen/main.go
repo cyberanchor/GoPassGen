@@ -9,7 +9,7 @@ package main
 import (
 	"os"
 
-	"gopassgen/internal/cli"
+	"github.com/cyberanchor/GoPassGen/internal/cli"
 )
 
 func main() {

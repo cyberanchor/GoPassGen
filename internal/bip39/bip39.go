@@ -9,13 +9,14 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"embed"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"sort"
 	"strings"
 	"sync"
 
-	"gopassgen/internal/derive"
+	"github.com/cyberanchor/GoPassGen/internal/derive"
 )
 
 //go:embed wordlists/*.txt
@@ -58,6 +59,19 @@ var supported = []string{
 	"chinese_simplified",
 }
 
+// wordlistDigests are the SHA-256 digests of the wordlist files published with
+// BIP-39. A single wrong byte would otherwise produce phrases that no other
+// wallet accepts, so Load refuses a list that does not match.
+var wordlistDigests = map[string]string{
+	"english":            "2f5eed53a4727b4bf8880d8f3f199efc90e58503646d9ff8eff3a2ed3b24dbda",
+	"french":             "ebc3959ab7801a1df6bac4fa7d970652f1df76b683cd2f4003c941c63d517e59",
+	"spanish":            "46846a5a0139d1e3cb77293e521c2865f7bcdb82c44e8d0a06a2cd0ecba48c0b",
+	"italian":            "d392c49fdb700a24cd1fceb237c1f65dcc128f6b34a8aacb58b59384b5c648c2",
+	"japanese":           "2eed0aef492291e061633d7ad8117f1a2b03eb80a29d0e4e3117ac2528d05ffd",
+	"korean":             "9e95f86c167de88f450f0aaf89e87f6624a57f973c67b516e338e8e8b8897f60",
+	"chinese_simplified": "5c5942792bd8340cb8b27cd592f1015edf56a8c5b26276ee18a482428e7c5726",
+}
+
 // Languages returns the supported language identifiers, sorted.
 func Languages() []string {
 	out := append([]string(nil), supported...)
@@ -93,7 +107,6 @@ func StrengthBits(words int) (int, bool) {
 }
 
 // Digest returns the SHA-256 of the embedded wordlist file for a language.
-// It lets the self-test detect a corrupted or tampered binary.
 func Digest(language string) ([]byte, error) {
 	if !IsSupported(language) {
 		return nil, fmt.Errorf("%w: %q", ErrUnsupportedLanguage, language)
@@ -119,8 +132,9 @@ var (
 	cache   = map[string]*Wordlist{}
 )
 
-// Load returns the wordlist for a language. Results are cached; the returned
-// value is read-only and safe for concurrent use.
+// Load returns the wordlist for a language, after verifying its SHA-256 digest.
+// Results are cached; the returned value is read-only and safe for concurrent
+// use.
 func Load(language string) (*Wordlist, error) {
 	if !IsSupported(language) {
 		return nil, fmt.Errorf("%w: %q (supported: %s)",
@@ -139,6 +153,26 @@ func Load(language string) (*Wordlist, error) {
 			ErrWordlistCorrupt, language, err)
 	}
 
+	if err := verifyDigest(language, data); err != nil {
+		return nil, err
+	}
+	wl, err := parseWordlist(language, data)
+	if err != nil {
+		return nil, err
+	}
+	cache[language] = wl
+	return wl, nil
+}
+
+func verifyDigest(language string, data []byte) error {
+	sum := sha256.Sum256(data)
+	if hex.EncodeToString(sum[:]) != wordlistDigests[language] {
+		return fmt.Errorf("%w: %s does not match its SHA-256 digest", ErrWordlistCorrupt, language)
+	}
+	return nil
+}
+
+func parseWordlist(language string, data []byte) (*Wordlist, error) {
 	words := make([]string, 0, WordlistSize)
 	for _, line := range strings.Split(strings.ReplaceAll(string(data), "\r\n", "\n"), "\n") {
 		if w := strings.TrimSpace(line); w != "" {
@@ -165,10 +199,7 @@ func Load(language string) (*Wordlist, error) {
 	if language == "japanese" {
 		delimiter = IdeographicSpace
 	}
-
-	wl := &Wordlist{language: language, words: words, index: index, delimiter: delimiter}
-	cache[language] = wl
-	return wl, nil
+	return &Wordlist{language: language, words: words, index: index, delimiter: delimiter}, nil
 }
 
 // Language returns the wordlist identifier.
@@ -215,7 +246,9 @@ func (wl *Wordlist) Validate(mnemonic string) error {
 			ErrWordCount, len(words), WordCounts())
 	}
 
-	bits := make([]byte, 0, len(words)*11)
+	// The bit array is the entropy in another form, so it is secret too.
+	bits := derive.TrackSecret(make([]byte, 0, len(words)*11))
+	defer func() { derive.Wipe(bits) }()
 	for i, w := range words {
 		idx, ok := wl.index[w]
 		if !ok {
@@ -231,7 +264,7 @@ func (wl *Wordlist) Validate(mnemonic string) error {
 	entBits := total / 33 * 32
 	csBits := total / 33
 
-	entropy := make([]byte, entBits/8)
+	entropy := derive.TrackSecret(make([]byte, entBits/8))
 	for i := 0; i < entBits; i++ {
 		if bits[i] == 1 {
 			entropy[i/8] |= 1 << uint(7-i%8)
@@ -240,6 +273,7 @@ func (wl *Wordlist) Validate(mnemonic string) error {
 
 	sum := sha256.Sum256(entropy)
 	derive.Wipe(entropy)
+	defer derive.Wipe(sum[:])
 
 	for i := 0; i < csBits; i++ {
 		want := (sum[i/8] >> uint(7-i%8)) & 1
@@ -276,9 +310,11 @@ func (wl *Wordlist) ToMnemonic(entropy []byte) (string, error) {
 	}
 
 	sum := sha256.Sum256(entropy)
+	defer derive.Wipe(sum[:])
 	csBits := len(entropy) * 8 / 32
 
-	bits := make([]byte, 0, len(entropy)*8+csBits)
+	bits := derive.TrackSecret(make([]byte, 0, len(entropy)*8+csBits))
+	defer func() { derive.Wipe(bits) }()
 	for _, b := range entropy {
 		for i := 7; i >= 0; i-- {
 			bits = append(bits, (b>>uint(i))&1)
@@ -309,7 +345,7 @@ func (wl *Wordlist) Generate(numWords int) (string, error) {
 		return "", fmt.Errorf("%w: got %d, want one of %v", ErrWordCount, numWords, WordCounts())
 	}
 
-	entropy := make([]byte, strength/8)
+	entropy := derive.TrackSecret(make([]byte, strength/8))
 	if _, err := rand.Read(entropy); err != nil {
 		return "", fmt.Errorf("entropy source failed: %w", err)
 	}
