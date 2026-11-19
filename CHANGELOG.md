@@ -7,6 +7,63 @@ password derivation algorithm and is printed by `-version`. A change to it means
 generated passwords no longer reproduce, and would require a major release plus an explicit
 migration note.
 
+## [Unreleased]
+
+### Added
+- `-case-sensitive` hides the values you typed (phrases, file names, other arguments) from
+  logs and error messages, wherever it stands on the command line.
+- `-output` now also works with `-mnemonic` and `-mnemonic-stdin`.
+- A CI workflow for pushes and pull requests, and signed build provenance for releases.
+- The licenses of Go and `golang.org/x/text` are included in the release archives.
+- Release archives contain `CHANGELOG.md`, and the release notes on GitHub are taken from it.
+
+### Changed
+- **Output files get ordinary permissions** (`0644` minus the umask) instead of `0600`. An
+  existing file keeps its mode.
+- An existing output file is replaced after a warning, and only once the run has succeeded:
+  data is written to a temporary file and renamed into place. If the directory is not
+  writable, the file is overwritten in place at the end instead, and a failure of that last
+  write loses the old contents.
+- With `-output`, nothing is written to stdout, so `-auto-gen` no longer prints its secrets
+  to the terminal as well.
+- Numbers are read as plain decimal: `016` is 16, not 14. Negative values, signs and base
+  prefixes are rejected in every mode. A password made earlier with a leading zero is
+  reproduced with the length it really had: `-password-length 016` gave 14 characters, so
+  use `-password-length 14`. All other passwords are unchanged.
+- Options without effect in the selected mode are errors, as are `-v` with a different
+  `-log-level` and additional work options with `-version` or `-self-test`.
+- A usage error prints the reason once and the help once. With `-log-format json` every
+  stderr line is JSON, and `-log-level silent` prints nothing.
+- On a terminal, `-mnemonic-stdin` hides the input and finishes at Enter.
+- PBKDF2 and HMAC-SHA512 are implemented in `internal/derive`, which removes the
+  `golang.org/x/crypto` dependency. Derived values are unchanged and are checked against
+  the published vectors and the standard library.
+- The module path is `github.com/cyberanchor/GoPassGen`, so `go install` works.
+- GitHub releases carry a prebuilt binary for Linux x86-64 only, with the source archive and
+  `SHA256SUMS`. Every other target is still built by the release workflow as a check; on
+  those systems use `go install` or build from source.
+
+### Fixed
+- Write errors were ignored: on a full disk the tool could report success and exit 0 with an
+  empty or truncated file. Failures on files and on stdout now exit with code 1.
+- SIGINT and SIGTERM had no effect while waiting for stdin, a FIFO or a full pipe, during a
+  single derivation and during `-self-test`. All of them now exit with code 130.
+- A bad `-output` path is detected before any derivation runs.
+- `-output` no longer follows symbolic links to files.
+- Directories created for `-output` are removed again when the run fails.
+- Every wordlist is checked against its SHA-256 digest whenever it is loaded, not only by
+  `-self-test`.
+- HMAC state and entropy bit arrays are erased after use.
+- Colour needs a real terminal: `/dev/null` no longer qualifies. An empty `NO_COLOR` no
+  longer disables colour, as no-color.org specifies.
+- `./build.sh dist` packages tracked files only, so stray files such as generated phrases
+  cannot end up in the source archive.
+- Release archives no longer depend on the time zone or umask, and
+  `verify-reproducible` really builds in a different environment.
+- The release workflow can be started by hand from any branch, does not expand its input
+  inside shell scripts, pins Go and all actions exactly, and limits write access to the
+  publishing job.
+
 ## [1.4.1] - 2026-08-12
 
 ### Changed
@@ -29,9 +86,6 @@ migration note.
   stored per-file timestamps and directory order, so `SHA256SUMS` changed on every
   packaging run; timestamps are pinned to `SOURCE_DATE_EPOCH` and entries are
   sorted before archiving.
-- `release.sh` verified that the working tree was clean using a command
-  substitution inside `[[ ... ]]`, which does not trip `set -e`: outside a git
-  repository the check silently passed. The exit status is now captured explicitly.
 
 ### Notes
 - The pretty layout, colour behaviour, level names and CLI flags are unchanged;
