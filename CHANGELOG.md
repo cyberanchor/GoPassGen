@@ -7,6 +7,25 @@ password derivation algorithm and is printed by `-version`. A change to it means
 generated passwords no longer reproduce, and would require a major release plus an explicit
 migration note.
 
+## [Unreleased]
+
+### Security
+- `golang.org/x/text` is updated from v0.14.0 to v0.44.0, which fixes
+  [GO-2026-5970](https://pkg.go.dev/vuln/GO-2026-5970) (CVE-2026-56852): `unicode/norm` could
+  loop forever on invalid UTF-8. GoPassGen 1.5.0 is not affected in practice. It only calls
+  `NFKD.String`, which returns even on the input from the upstream fix, while the loop is in
+  the NFC and NFKC iterators. govulncheck flags the call anyway, which is why CI failed. The
+  update also fixes GO-2026-6629 in `secure/precis`, a package GoPassGen does not use.
+
+### Changed
+- Building from source needs Go 1.26 or newer instead of 1.21, because the fixed
+  `golang.org/x/text` requires it. Release binaries are still built with Go 1.27.4.
+- Built with Go 1.27 or newer, normalisation uses the Unicode 17.0.0 tables instead of
+  15.0.0. Every earlier decomposition is unchanged, and none of the 57 characters that
+  decompose only under the newer tables, such as outlined Latin letters, decomposes to a
+  character of any wordlist. The same phrases are accepted as before, and each gives the
+  same password.
+
 ## [1.5.0] - 2026-11-19
 
 ### Added

@@ -103,7 +103,7 @@ require_go() {
     command -v go >/dev/null 2>&1 || die "go toolchain not found in PATH"
     local have want
     have="$(go env GOVERSION)"
-    want="go1.21"
+    want="go1.26"   # the go line in go.mod
     # Lexical comparison is wrong across major versions; compare numerically.
     local hv wv
     hv="$(printf '%s' "${have}" | sed -n 's/^go\([0-9]*\)\.\([0-9]*\).*/\1 \2/p')"

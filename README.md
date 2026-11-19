@@ -1,6 +1,6 @@
 # GoPassGen
 
-![Version](https://img.shields.io/badge/version-1.5.0-green) ![Go](https://img.shields.io/badge/go-1.21+-green) ![Compatible](https://img.shields.io/badge/compatible-PyPassGen%201.3.5-blue) ![Coverage](https://img.shields.io/badge/coverage-95%25-green)
+![Version](https://img.shields.io/badge/version-1.5.0-green) ![Go](https://img.shields.io/badge/go-1.26+-green) ![Compatible](https://img.shields.io/badge/compatible-PyPassGen%201.3.5-blue) ![Coverage](https://img.shields.io/badge/coverage-95%25-green)
 
 **GoPassGen** generates deterministic passwords from BIP-39 mnemonic phrases, or automatically creates mnemonic phrases and passwords. It is a Go port of [PyPassGen 1.3.5](https://github.com/cyberanchor/pypassgen/tree/v1.3.5-stability) and produces **byte-identical passwords** for the same mnemonic.
 
@@ -58,6 +58,8 @@ CHARSET = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 go install github.com/cyberanchor/GoPassGen/cmd/gopassgen@latest
 gopassgen -self-test
 ```
+
+This needs Go 1.26 or newer.
 
 ### From a release
 
@@ -272,7 +274,7 @@ Still present, because Go has no supported way to remove it: the standard build-
 $ go version -m gopassgen
 gopassgen: go1.27.4
         path    github.com/cyberanchor/GoPassGen/cmd/gopassgen
-        dep     golang.org/x/text       v0.14.0
+        dep     golang.org/x/text       v0.44.0
         build   -trimpath=true
         build   CGO_ENABLED=0
         ...
