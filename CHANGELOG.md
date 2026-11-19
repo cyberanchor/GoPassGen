@@ -7,7 +7,7 @@ password derivation algorithm and is printed by `-version`. A change to it means
 generated passwords no longer reproduce, and would require a major release plus an explicit
 migration note.
 
-## [Unreleased]
+## [1.5.1] - 2026-11-19
 
 ### Security
 - `golang.org/x/text` is updated from v0.14.0 to v0.44.0, which fixes
