@@ -16,7 +16,7 @@ const (
 	Name = "GoPassGen"
 
 	// Version is the release version of this tool.
-	Version = "1.4.1"
+	Version = "1.5.0"
 
 	// DerivationVersion identifies the password derivation algorithm this
 	// build implements. It is NOT the tool version: it is the compatibility
@@ -39,7 +39,7 @@ func VersionString() string {
 	)
 }
 
-// Short returns a one-line identifier, e.g. "GoPassGen 1.4.1".
+// Short returns a one-line identifier, e.g. "GoPassGen 1.5.0".
 func Short() string {
 	return Name + " " + Version
 }

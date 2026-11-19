@@ -1,6 +1,6 @@
 # GoPassGen
 
-![Version](https://img.shields.io/badge/version-1.4.1-green) ![Go](https://img.shields.io/badge/go-1.21+-green) ![Compatible](https://img.shields.io/badge/compatible-PyPassGen%201.3.5-blue) ![Coverage](https://img.shields.io/badge/coverage-95%25-green)
+![Version](https://img.shields.io/badge/version-1.5.0-green) ![Go](https://img.shields.io/badge/go-1.21+-green) ![Compatible](https://img.shields.io/badge/compatible-PyPassGen%201.3.5-blue) ![Coverage](https://img.shields.io/badge/coverage-95%25-green)
 
 **GoPassGen** generates deterministic passwords from BIP-39 mnemonic phrases, or automatically creates mnemonic phrases and passwords. It is a Go port of [PyPassGen 1.3.5](https://github.com/cyberanchor/pypassgen/tree/v1.3.5-stability) and produces **byte-identical passwords** for the same mnemonic.
 
@@ -64,7 +64,7 @@ gopassgen -self-test
 Each [release](https://github.com/cyberanchor/GoPassGen/releases) carries a prebuilt binary for Linux x86-64, the source archive and `SHA256SUMS`. On other systems use `go install` or build from source.
 
 ```bash
-VER=1.4.1
+VER=1.5.0
 BASE=gopassgen-v${VER}-linux-amd64
 
 curl -LO "https://github.com/cyberanchor/GoPassGen/releases/download/v${VER}/${BASE}.zip"
@@ -211,7 +211,7 @@ Diagnostics are emitted through the standard library's `log/slog` with structure
 
 ```console
 $ gopassgen -mnemonic-only -count 2 -words 24 -v
-2026-08-12 11:59:40.002 - DEBUG - starting language=english version=1.4.1 derivation=pypassgen-1.3.5
+2026-08-12 11:59:40.002 - DEBUG - starting language=english version=1.5.0 derivation=pypassgen-1.3.5
 2026-08-12 11:59:40.003 - DEBUG - wordlist loaded language=english words=2048
 2026-08-12 11:59:40.003 - INFO  - generating mnemonics language=english count=2 words=24
 ```

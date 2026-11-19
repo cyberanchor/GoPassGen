@@ -7,7 +7,7 @@ password derivation algorithm and is printed by `-version`. A change to it means
 generated passwords no longer reproduce, and would require a major release plus an explicit
 migration note.
 
-## [Unreleased]
+## [1.5.0] - 2026-11-19
 
 ### Added
 - `-case-sensitive` hides the values you typed (phrases, file names, other arguments) from
