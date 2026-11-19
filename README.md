@@ -63,7 +63,7 @@ This needs Go 1.26 or newer.
 
 ### From a release
 
-Each [release](https://github.com/cyberanchor/GoPassGen/releases) carries a prebuilt binary for Linux x86-64, the source archive and `SHA256SUMS`. On other systems use `go install` or build from source.
+Each [release](https://github.com/cyberanchor/GoPassGen/releases) carries a prebuilt binary for Linux x86-64, the source archive and `SHA256SUMS`. On other systems use `go install` or build from source. Windows is not built or tested.
 
 ```bash
 VER=1.5.0

@@ -65,6 +65,11 @@ jobs:
       - name: Run tests under the race detector
         run: go test -mod=vendor -race -short ./...
 
+      # The same check as in CI: a release must not ship a dependency or a Go
+      # version with a known vulnerability that the code reaches.
+      - name: Check dependencies for known vulnerabilities
+        run: go run golang.org/x/vuln/cmd/govulncheck@v1.10.0 ./...
+
       - name: Verify the build is reproducible
         run: ./build.sh verify-reproducible
 
@@ -110,7 +115,6 @@ jobs:
           for target in ${PUBLISH_TARGETS}; do
             name="gopassgen-${RELEASE_TAG}-${target%/*}-${target#*/}"
             bin=gopassgen
-            [ "${target%/*}" = windows ] && bin=gopassgen.exe
             listing="$(unzip -Z1 "dist/${name}.zip")"
             for file in "${bin}" "${bin}.sha256" README.md CHANGELOG.md LICENSE; do
               if ! grep -qx "${name}/${file}" <<<"${listing}"; then

@@ -25,6 +25,12 @@ migration note.
   decompose only under the newer tables, such as outlined Latin letters, decomposes to a
   character of any wordlist. The same phrases are accepted as before, and each gives the
   same password.
+- Windows is no longer built or tested: `./build.sh dist`, the release workflow and CI leave
+  it out. Nothing was ever published for it.
+
+### Fixed
+- The release workflow did not run govulncheck, so 1.5.0 was published although the same
+  check had failed in CI. It now runs before the release artefacts are built.
 
 ## [1.5.0] - 2026-11-19
 

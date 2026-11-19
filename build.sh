@@ -40,9 +40,9 @@ VERSION="$(sed -n 's/^[[:space:]]*Version[[:space:]]*=[[:space:]]*"\([^"]*\)".*/
     "${ROOT}/internal/buildinfo/buildinfo.go" | head -n1)"
 [[ -n "${VERSION}" ]] || { echo "cannot determine version from internal/buildinfo" >&2; exit 1; }
 
+# Windows is left out on purpose: it is neither published nor tested.
 DEFAULT_TARGETS="linux/amd64 linux/arm64 linux/386 linux/arm \
 darwin/amd64 darwin/arm64 \
-windows/amd64 windows/arm64 \
 freebsd/amd64 openbsd/amd64"
 
 # Archives are made reproducible by pinning every stored timestamp. Without

@@ -14,8 +14,8 @@ jobs:
   test:
     name: test (${{ matrix.os }}, Go ${{ matrix.go }})
     runs-on: ${{ matrix.os }}
-    # macOS and Windows are compiled for every release but have no history of
-    # passing here yet, so they report without blocking.
+    # macOS is compiled for every release but nothing is published for it, so it
+    # reports without blocking. Windows is not built or tested at all.
     continue-on-error: ${{ matrix.experimental }}
     strategy:
       fail-fast: false
@@ -25,7 +25,6 @@ jobs:
           # go.mod needs Go 1.26: the latest patch of that line.
           - { os: ubuntu-latest, go: '1.26.11', experimental: false }
           - { os: macos-latest, go: '1.27.4', experimental: true }
-          - { os: windows-latest, go: '1.27.4', experimental: true }
     steps:
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
