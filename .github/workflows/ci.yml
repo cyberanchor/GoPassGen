@@ -1,0 +1,76 @@
+name: ci
+
+# Runs on every push to main and on every pull request.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: test (${{ matrix.os }}, Go ${{ matrix.go }})
+    runs-on: ${{ matrix.os }}
+    # macOS and Windows are compiled for every release but have no history of
+    # passing here yet, so they report without blocking.
+    continue-on-error: ${{ matrix.experimental }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-latest, go: '1.27.4', experimental: false }
+          - { os: ubuntu-latest, go: '1.21.13', experimental: false }
+          - { os: macos-latest, go: '1.27.4', experimental: true }
+          - { os: windows-latest, go: '1.27.4', experimental: true }
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Go
+        uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
+        with:
+          go-version: ${{ matrix.go }}
+          check-latest: false
+          cache: false
+
+      - name: Run the short test suite
+        shell: bash
+        run: go test -mod=vendor -short ./...
+
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Go
+        uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
+        with:
+          go-version: '1.27.4'
+          check-latest: false
+          cache: false
+
+      - name: Verify formatting and vet
+        run: ./build.sh check
+
+      - name: Run the full test suite
+        run: ./build.sh test
+
+      - name: Run tests under the race detector
+        run: go test -mod=vendor -race -short ./...
+
+      - name: Check dependencies for known vulnerabilities
+        run: go run golang.org/x/vuln/cmd/govulncheck@v1.10.0 ./...
+
+      - name: Verify the build is reproducible
+        run: ./build.sh verify-reproducible
+
+      - name: Build every release target
+        run: ./build.sh dist

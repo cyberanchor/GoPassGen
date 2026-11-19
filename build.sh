@@ -3,9 +3,9 @@
 # build.sh — reproducible static builds and release artefacts for GoPassGen.
 #
 # Design goals:
-#   * release binaries are static, stripped and free of build metadata, so the
-#     same source tree plus the same Go toolchain always yields the same
-#     SHA-256 on any machine;
+#   * release binaries are static, stripped and free of paths, build IDs and VCS
+#     stamps, so the same source tree plus the same Go toolchain always yields
+#     the same SHA-256 on any machine;
 #   * debug binaries keep every symbol and disable optimisation and inlining,
 #     so delve and perf work properly;
 #   * no network access is required: dependencies are vendored.
@@ -19,7 +19,7 @@
 #   ./build.sh check               gofmt + go vet + short tests
 #   ./build.sh dist                cross-compile all targets + zips + SHA256SUMS
 #   ./build.sh dist --targets "linux/amd64 darwin/arm64"
-#   ./build.sh verify-reproducible builds twice and compares digests
+#   ./build.sh verify-reproducible rebuilds elsewhere and compares digests
 #   ./build.sh clean               remove build/ and dist/
 #
 set -Eeuo pipefail
@@ -50,6 +50,9 @@ freebsd/amd64 openbsd/amd64"
 # SHA256SUMS would change on every packaging run for no reason.
 # 315532800 = 1980-01-01, the earliest timestamp the zip format can store.
 SOURCE_DATE_EPOCH="${SOURCE_DATE_EPOCH:-315532800}"
+
+# What goes into the source archive when there is no git checkout to ask.
+SOURCE_PATHS=".github .gitignore CHANGELOG.md LICENSE README.md build.sh cmd go.mod go.sum internal vendor"
 
 # Vendored dependencies make the build hermetic. Fall back to module mode if
 # the vendor directory was deliberately removed.
@@ -124,14 +127,41 @@ normalize_mtimes() {
     fi
 }
 
+# normalize_tree removes everything the environment leaks into an archive: the
+# umask through file modes, the clock through timestamps.
+normalize_tree() {
+    local dir="$1"
+    find "${dir}" -type d -exec chmod 755 {} +
+    find "${dir}" -type f -perm -u+x -exec chmod 755 {} +
+    find "${dir}" -type f ! -perm -u+x -exec chmod 644 {} +
+    normalize_mtimes "${dir}"
+}
+
 # zip_deterministic archives a directory with a fixed file order and no extra
-# attributes (-X drops uid/gid and extended timestamps).
+# attributes (-X drops uid/gid and extended timestamps). zip stores local time,
+# so the time zone has to be fixed as well.
 zip_deterministic() {
     local zip_path="$1" base_dir="$2" entry="$3"
     ( cd "${base_dir}" \
       && find "${entry}" -print \
          | LC_ALL=C sort \
-         | zip -qX -@ "${zip_path}" )
+         | TZ=UTC zip -qX -@ "${zip_path}" )
+}
+
+# copy_licenses adds the notices that the BSD licenses of Go and golang.org/x/text
+# require for binary redistribution.
+copy_licenses() {
+    local dest="$1/licenses" goroot text_dir
+    goroot="$(go env GOROOT)"
+    text_dir="${ROOT}/vendor/golang.org/x/text"
+    if [[ ! -d "${text_dir}" ]]; then
+        text_dir="$(cd "${ROOT}" && go list -mod=mod -m -f '{{.Dir}}' golang.org/x/text)"
+    fi
+    mkdir -p "${dest}"
+    cp "${goroot}/LICENSE"      "${dest}/go.LICENSE"
+    cp "${goroot}/PATENTS"      "${dest}/go.PATENTS"
+    cp "${text_dir}/LICENSE"    "${dest}/golang.org-x-text.LICENSE"
+    cp "${text_dir}/PATENTS"    "${dest}/golang.org-x-text.PATENTS"
 }
 
 sha256_of() {
@@ -216,9 +246,8 @@ cmd_debug() {
 
 cmd_test() {
     require_go
-    local extra=("$@")
-    log "go test ${extra[*]:-} (full suite runs ~1M PBKDF2 iterations per vector)"
-    go test "${MOD_FLAG}" -timeout 1800s "${extra[@]}" ./...
+    log "go test $* (full suite runs ~1M PBKDF2 iterations per vector)"
+    go test "${MOD_FLAG}" -timeout 1800s "$@" ./...
     ok "tests passed"
 }
 
@@ -237,17 +266,34 @@ cmd_check() {
     cmd_test -short
 }
 
+# copy_worktree copies the working tree without the git database and build
+# output. It serves the reproducibility check only and never reaches an archive.
+copy_worktree() {
+    local dest="$1"
+    ( cd "${ROOT}" && tar cf - --exclude='./.git' --exclude='./dist' --exclude='./build' . ) \
+        | ( cd "${dest}" && tar xf - )
+}
+
+# The second build differs in everything that must not matter: directory, build
+# cache, time zone and umask. The fresh cache makes it slow, and honest.
 cmd_verify_reproducible() {
     require_go
-    log "building twice and comparing digests"
-    local a b
-    a="${OUT_DIR}/repro-a"; b="${OUT_DIR}/repro-b"
-    build_one release "$(go env GOOS)" "$(go env GOARCH)" "${a}"
-    build_one release "$(go env GOOS)" "$(go env GOARCH)" "${b}"
+    log "building in two different environments and comparing digests"
+    local work a b ha hb
+    work="$(mktemp -d)"
+    a="${work}/repro-a"; b="${work}/repro-b"
+    mkdir -p "${work}/elsewhere"
+    copy_worktree "${work}/elsewhere"
 
-    local ha hb
+    build_one release "$(go env GOOS)" "$(go env GOARCH)" "${a}"
+    ( cd "${work}/elsewhere" \
+      && umask 077 \
+      && TZ=Asia/Tokyo GOCACHE="${work}/cache" CGO_ENABLED=0 GOFLAGS="" \
+         go build "${RELEASE_GOFLAGS[@]}" -ldflags "${RELEASE_LDFLAGS}" -o "${b}" "${PKG}" )
+
     ha="$(sha256_of "${a}")"; hb="$(sha256_of "${b}")"
-    rm -f "${a}" "${b}"
+    chmod -R u+w "${work}"
+    rm -rf "${work}"
 
     [[ "${ha}" == "${hb}" ]] || die "builds differ: ${ha} vs ${hb}"
     ok "reproducible: ${ha}"
@@ -256,6 +302,34 @@ cmd_verify_reproducible() {
 # ---------------------------------------------------------------------------
 # Distribution
 # ---------------------------------------------------------------------------
+
+in_git_checkout() {
+    local prefix
+    prefix="$(git -C "${ROOT}" rev-parse --show-prefix 2>/dev/null)" && [[ -z "${prefix}" ]]
+}
+
+# copy_source_files copies what belongs in the source archive and nothing else.
+# Running the tool in the checkout creates files full of secrets, so whatever
+# merely happens to be lying in the working tree must stay out.
+copy_source_files() {
+    local dest="$1"
+    if in_git_checkout; then
+        if [[ -n "$(git -C "${ROOT}" status --porcelain)" ]]; then
+            log "warning: uncommitted changes; untracked files are not packaged"
+        fi
+        # A tracked file may have been deleted without committing that yet.
+        ( cd "${ROOT}" \
+          && git ls-files -z \
+             | while IFS= read -r -d '' f; do
+                   if [[ -e "${f}" || -L "${f}" ]]; then printf '%s\0' "${f}"; fi
+               done \
+             | tar --null -T - -cf - ) | ( cd "${dest}" && tar xf - )
+    else
+        # shellcheck disable=SC2086
+        ( cd "${ROOT}" && tar cf - --exclude='*.out' --exclude='*.test' --exclude='.DS_Store' ${SOURCE_PATHS} ) \
+            | ( cd "${dest}" && tar xf - )
+    fi
+}
 
 make_source_zip() {
     local zip_path="${DIST_DIR}/${APP}-v${VERSION}-source.zip"
@@ -266,20 +340,14 @@ make_source_zip() {
     command -v zip >/dev/null 2>&1 || die "zip is required for 'dist'"
 
     # The tree is copied out before being archived: normalising timestamps in
-    # place would rewrite the working directory. Exclude the git database, not
-    # the .github directory — a pattern like '*.git*' silently drops the
-    # release workflow too.
+    # place would rewrite the working directory.
     mkdir -p "${stage}"
-    ( cd "${ROOT}" && tar cf - \
-        --exclude='./.git' --exclude='./dist' --exclude='./build' \
-        --exclude='*.DS_Store' --exclude='*.out' --exclude='*.test' \
-        . ) | ( cd "${stage}" && tar xf - )
+    copy_source_files "${stage}"
 
-    normalize_mtimes "${stage}"
+    normalize_tree "${stage}"
     zip_deterministic "${zip_path}" "${staging}" "${APP}-v${VERSION}-source"
     ok "source archive -> ${zip_path#"${ROOT}"/}"
 }
-
 cmd_dist() {
     require_go
     command -v zip >/dev/null 2>&1 || die "zip is required for 'dist'"
@@ -309,8 +377,9 @@ cmd_dist() {
         mkdir -p "${stage}"
         build_one release "${goos}" "${goarch}" "${stage}/${binname}"
 
-        cp "${ROOT}/README.md" "${stage}/" 2>/dev/null || true
-        cp "${ROOT}/LICENSE"   "${stage}/" 2>/dev/null || true
+        # The documents belong in every archive: a missing one stops the build.
+        cp "${ROOT}/README.md" "${ROOT}/CHANGELOG.md" "${ROOT}/LICENSE" "${stage}/"
+        copy_licenses "${stage}"
 
         # Per-archive checksum of the raw binary, in the standard
         # "<digest>  <name>" format so that a user who unpacks the zip can run
@@ -318,7 +387,7 @@ cmd_dist() {
         ( cd "${stage}" && write_checksum_line "${binname}" > "${binname}.sha256" ) \
             || die "checksum failed for ${target}"
 
-        normalize_mtimes "${stage}"
+        normalize_tree "${stage}"
         zip_deterministic \
             "${DIST_DIR}/${APP}-v${VERSION}-${goos}-${goarch}.zip" \
             "${staging}" "${APP}-v${VERSION}-${goos}-${goarch}"
@@ -342,8 +411,9 @@ cmd_clean() {
 # Entry point
 # ---------------------------------------------------------------------------
 
+# The usage text is the comment block at the top of this file.
 usage() {
-    sed -n '3,30p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+    awk 'NR > 2 { if (!/^#/) exit; sub(/^# ?/, ""); print }' "${BASH_SOURCE[0]}"
 }
 
 main() {

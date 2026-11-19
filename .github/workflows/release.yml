@@ -1,35 +1,60 @@
 name: release
 
-# Builds every target, verifies the artefacts and publishes a GitHub release
-# with the binaries, the source archive and a single SHA256SUMS file.
+# Builds every target as a check, verifies the artefacts and publishes a GitHub
+# release with the archives for PUBLISH_TARGETS, the source archive, a single
+# SHA256SUMS file, release notes taken from CHANGELOG.md and signed build
+# provenance.
 #
-# Triggered by pushing a tag:  git tag -a v1.4.0 -m "GoPassGen 1.4.0" && git push origin v1.4.0
+# Triggered by pushing a tag:  git tag -a vX.Y.Z -m "GoPassGen X.Y.Z" && git push origin vX.Y.Z
+# or by hand for a tag that already exists.
 
 on:
   push:
     tags:
-      - 'v*'
+      - 'v[0-9]+.[0-9]+.[0-9]+'
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Tag to release (e.g. v1.4.0)'
+        description: 'Existing tag to release (vMAJOR.MINOR.PATCH)'
         required: true
+        type: string
 
 permissions:
-  contents: write
+  contents: read
+
+env:
+  # The input arrives through the environment, never through the script text,
+  # so a crafted value cannot run as shell code.
+  RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+  # Archives attached to the release. Every other target is still built below
+  # as a check, but only these have been run before a release.
+  PUBLISH_TARGETS: linux/amd64
 
 jobs:
-  release:
+  build:
     runs-on: ubuntu-latest
     steps:
+      - name: Validate the tag name
+        run: |
+          set -euo pipefail
+          if ! [[ "${RELEASE_TAG}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "not a release tag: ${RELEASE_TAG}" >&2
+            exit 1
+          fi
+
       - name: Check out source
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: refs/tags/${{ env.RELEASE_TAG }}
+          persist-credentials: false
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
         with:
-          go-version: '1.22'
-          check-latest: false     # pinned: the toolchain version affects the binary digest
+          # An exact version: the toolchain affects the digest of every binary.
+          go-version: '1.27.4'
+          check-latest: false
+          cache: false
 
       - name: Verify formatting and vet
         run: ./build.sh check
@@ -38,7 +63,7 @@ jobs:
         run: ./build.sh test
 
       - name: Run tests under the race detector
-        run: go test -race -short ./...
+        run: go test -mod=vendor -race -short ./...
 
       - name: Verify the build is reproducible
         run: ./build.sh verify-reproducible
@@ -46,48 +71,131 @@ jobs:
       - name: Confirm the tag matches the source version
         run: |
           set -euo pipefail
-          tag="${GITHUB_REF_NAME:-${{ github.event.inputs.tag }}}"
           src="v$(sed -n 's/^[[:space:]]*Version[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' \
                 internal/buildinfo/buildinfo.go | head -n1)"
-          if [ "${tag}" != "${src}" ]; then
-            echo "tag ${tag} does not match buildinfo version ${src}" >&2
+          if [ "${RELEASE_TAG}" != "${src}" ]; then
+            echo "tag ${RELEASE_TAG} does not match buildinfo version ${src}" >&2
             exit 1
           fi
 
-      - name: Build release artefacts
+      - name: Take the release notes from CHANGELOG.md
+        run: |
+          set -euo pipefail
+          awk -v heading="## [${RELEASE_TAG#v}]" '
+            index($0, heading) == 1 { found = 1; next }
+            found && /^## / { exit }
+            found { print }
+          ' CHANGELOG.md > release-notes.md
+          if ! grep -q '[^[:space:]]' release-notes.md; then
+            echo "CHANGELOG.md has no section for ${RELEASE_TAG#v}" >&2
+            exit 1
+          fi
+
+      - name: Build every target as a check
         run: ./build.sh dist
+
+      - name: Build the published artefacts
+        run: ./build.sh dist --targets "${PUBLISH_TARGETS}"
 
       - name: Self-test the freshly built linux/amd64 binary
         run: |
           set -euo pipefail
-          ver="$(sed -n 's/^[[:space:]]*Version[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' \
-                internal/buildinfo/buildinfo.go | head -n1)"
           dir="$(mktemp -d)"
-          unzip -q "dist/gopassgen-v${ver}-linux-amd64.zip" -d "${dir}"
-          chmod +x "${dir}/gopassgen-v${ver}-linux-amd64/gopassgen"
-          "${dir}/gopassgen-v${ver}-linux-amd64/gopassgen" -self-test
+          unzip -q "dist/gopassgen-${RELEASE_TAG}-linux-amd64.zip" -d "${dir}"
+          "${dir}/gopassgen-${RELEASE_TAG}-linux-amd64/gopassgen" -self-test
+
+      - name: Check the archive contents
+        run: |
+          set -euo pipefail
+          for target in ${PUBLISH_TARGETS}; do
+            name="gopassgen-${RELEASE_TAG}-${target%/*}-${target#*/}"
+            bin=gopassgen
+            [ "${target%/*}" = windows ] && bin=gopassgen.exe
+            listing="$(unzip -Z1 "dist/${name}.zip")"
+            for file in "${bin}" "${bin}.sha256" README.md CHANGELOG.md LICENSE; do
+              if ! grep -qx "${name}/${file}" <<<"${listing}"; then
+                echo "${name}.zip lacks ${file}" >&2
+                exit 1
+              fi
+            done
+          done
 
       - name: Verify SHA256SUMS covers every artefact
-        run: cd dist && sha256sum -c SHA256SUMS
+        run: |
+          set -euo pipefail
+          cd dist
+          sha256sum -c SHA256SUMS
+          diff <(ls -1 | grep -vx SHA256SUMS | sort) <(awk '{print $2}' SHA256SUMS | sort)
+
+      - name: Keep the artefacts for the publishing job
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: dist
+          path: dist/
+          if-no-files-found: error
+
+      - name: Keep the release notes for the publishing job
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: notes
+          path: release-notes.md
+          if-no-files-found: error
+
+  # Only this job can write to the repository, and it runs none of the code
+  # from the repository: the release notes are only read as text.
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    steps:
+      - name: Fetch the artefacts
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: dist
+          path: dist
+
+      - name: Fetch the release notes
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: notes
+          path: notes
+
+      - name: Sign build provenance
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: dist/*
 
       - name: Publish the release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          tag="${GITHUB_REF_NAME:-${{ github.event.inputs.tag }}}"
-          gh release create "${tag}" dist/* \
-            --title "GoPassGen ${tag}" \
-            --notes "Deterministic passwords from BIP-39 mnemonic phrases.
+          cat > notes.md <<NOTES
+          Deterministic passwords from BIP-39 mnemonic phrases.
           Bit-compatible with PyPassGen 1.3.5: the same phrase yields the same password.
+
+          The release carries a prebuilt binary for Linux x86-64. On other systems run
+          \`go install github.com/${GITHUB_REPOSITORY}/cmd/gopassgen@${RELEASE_TAG}\` or build from the source archive.
 
           **Verify before running**
           \`\`\`bash
           sha256sum --ignore-missing -c SHA256SUMS
-          unzip gopassgen-${tag}-linux-amd64.zip && cd gopassgen-${tag}-linux-amd64
+          gh attestation verify gopassgen-${RELEASE_TAG}-linux-amd64.zip --repo ${GITHUB_REPOSITORY}
+          unzip gopassgen-${RELEASE_TAG}-linux-amd64.zip && cd gopassgen-${RELEASE_TAG}-linux-amd64
           sha256sum -c gopassgen.sha256
           ./gopassgen -self-test
           \`\`\`
 
           Binaries are static, stripped and built with \`-trimpath -buildvcs=false -buildid=\`,
-          so they contain no build metadata and are reproducible from the source archive."
+          so they are reproducible from the source archive with the same Go version.
+          NOTES
+          printf '\n## Changes in %s\n\n' "${RELEASE_TAG}" >> notes.md
+          cat notes/release-notes.md >> notes.md
+          gh release create "${RELEASE_TAG}" dist/* \
+            --repo "${GITHUB_REPOSITORY}" \
+            --verify-tag \
+            --title "GoPassGen ${RELEASE_TAG}" \
+            --notes-file notes.md
